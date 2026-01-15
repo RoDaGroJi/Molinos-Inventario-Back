@@ -18,6 +18,7 @@ app = FastAPI(title="Sistema de Inventario Oficina")
 origins = [
     "http://localhost:5173", # Puerto por defecto de Vite
     "http://127.0.0.1:5173",
+    "https://molinos-inventario-front.onrender.com"
 ]
 
 app.add_middleware(
