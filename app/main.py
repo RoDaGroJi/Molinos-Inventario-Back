@@ -140,6 +140,10 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), current
     db.refresh(new_user)
     return new_user
 
+@app.get("/users/", response_model=List[schemas.UserOut])
+def list_users(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
+    return db.query(models.User).all()
+
 @app.post("/cargos/", response_model=schemas.CatalogOut)
 def create_cargo(obj: schemas.CatalogBase, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
     new_obj = models.Cargo(nombre=obj.nombre)
