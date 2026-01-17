@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV /home/inge29/molinos/inventory-back/venv
+set -gx VIRTUAL_ENV /home/work/propios/molinos/Molinos-Inventario-Back/venv
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"bin $PATH

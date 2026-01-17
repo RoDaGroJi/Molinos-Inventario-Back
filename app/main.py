@@ -1,7 +1,8 @@
-from typing import List
-from fastapi import FastAPI, Depends, File, HTTPException, UploadFile, status
+from typing import List, Optional
+from fastapi import FastAPI, Depends, File, HTTPException, UploadFile, status, Query
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from . import models, schemas, auth, database
 from .database import engine, get_db
 from jose import jwt, JWTError
@@ -9,7 +10,16 @@ from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import io
 from datetime import datetime
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib.units import cm
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -17,7 +27,9 @@ app = FastAPI(title="Sistema de Inventario Oficina")
 # --- CONFIGURACIÓN DE CORS ---
 origins = [
     "http://localhost:5173", # Puerto por defecto de Vite
+    "http://localhost:5174", # Puerto alternativo de Vite
     "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
     "https://molinos-inventario-front.onrender.com"
 ]
 
@@ -72,21 +84,274 @@ def create_admin():
         db.commit()
     db.close()
 
+# --- ENDPOINTS EMPLEADOS ---
+
+@app.post("/empleados/", response_model=schemas.EmpleadoOut)
+def create_empleado(empleado: schemas.EmpleadoCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    new_empleado = models.Empleado(**empleado.dict(), created_by_id=current_user.id)
+    db.add(new_empleado)
+    db.commit()
+    db.refresh(new_empleado)
+    return new_empleado
+
+@app.get("/empleados/", response_model=List[schemas.EmpleadoOut])
+def get_empleados(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user), search: str = None):
+    query = db.query(models.Empleado)
+    if not current_user.is_admin:
+        query = query.filter(models.Empleado.is_active == True)
+    if search:
+        query = query.filter(models.Empleado.nombre.ilike(f"%{search}%"))
+    return query.all()
+
+@app.get("/empleados/{empleado_id}", response_model=schemas.EmpleadoOut)
+def get_empleado(empleado_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    empleado = db.query(models.Empleado).filter(models.Empleado.id == empleado_id).first()
+    if not empleado:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return empleado
+
+@app.put("/empleados/{empleado_id}", response_model=schemas.EmpleadoOut)
+def update_empleado(
+    empleado_id: int,
+    empleado: schemas.EmpleadoCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    db_empleado = db.query(models.Empleado).filter(models.Empleado.id == empleado_id).first()
+    if not db_empleado:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    
+    for key, value in empleado.dict().items():
+        setattr(db_empleado, key, value)
+    
+    db_empleado.updated_at = datetime.now()
+    db.commit()
+    db.refresh(db_empleado)
+    return db_empleado
+
+@app.delete("/empleados/{empleado_id}")
+def delete_empleado(
+    empleado_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_admin_user)
+):
+    empleado = db.query(models.Empleado).filter(models.Empleado.id == empleado_id).first()
+    if not empleado:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    
+    empleado.is_active = False
+    empleado.updated_at = datetime.now()
+    db.commit()
+    return {"message": "Empleado desactivado exitosamente"}
+
+# --- ENDPOINTS PRODUCTOS ---
+
+@app.post("/productos/", response_model=schemas.ProductoOut)
+def create_producto(producto: schemas.ProductoCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    new_producto = models.Producto(**producto.dict(), created_by_id=current_user.id)
+    db.add(new_producto)
+    db.commit()
+    db.refresh(new_producto)
+    return new_producto
+
+@app.get("/productos/", response_model=List[schemas.ProductoOut])
+def get_productos(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user), search: str = None):
+    query = db.query(models.Producto)
+    if not current_user.is_admin:
+        query = query.filter(models.Producto.is_active == True)
+    if search:
+        query = query.filter(
+            or_(
+                models.Producto.marca.ilike(f"%{search}%"),
+                models.Producto.referencia.ilike(f"%{search}%"),
+                models.Producto.serial.ilike(f"%{search}%")
+            )
+        )
+    return query.all()
+
+@app.get("/productos/{producto_id}", response_model=schemas.ProductoOut)
+def get_producto(producto_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    return producto
+
+@app.put("/productos/{producto_id}", response_model=schemas.ProductoOut)
+def update_producto(
+    producto_id: int,
+    producto: schemas.ProductoCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    db_producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
+    if not db_producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    
+    for key, value in producto.dict().items():
+        setattr(db_producto, key, value)
+    
+    db_producto.updated_at = datetime.now()
+    db.commit()
+    db.refresh(db_producto)
+    return db_producto
+
+@app.delete("/productos/{producto_id}")
+def delete_producto(
+    producto_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_admin_user)
+):
+    producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    
+    producto.is_active = False
+    producto.updated_at = datetime.now()
+    db.commit()
+    return {"message": "Producto desactivado exitosamente"}
+
+@app.get("/empleados/{empleado_id}/productos", response_model=List[schemas.ProductoOut])
+def get_productos_empleado(empleado_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    empleado = db.query(models.Empleado).filter(models.Empleado.id == empleado_id).first()
+    if not empleado:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return empleado.productos
+
+@app.post("/empleados/{empleado_id}/productos/{producto_id}")
+def asociar_producto_empleado(
+    empleado_id: int, 
+    producto_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    empleado = db.query(models.Empleado).filter(models.Empleado.id == empleado_id).first()
+    producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
+    
+    if not empleado or not producto:
+        raise HTTPException(status_code=404, detail="Empleado o producto no encontrado")
+    
+    if producto not in empleado.productos:
+        empleado.productos.append(producto)
+        db.commit()
+    
+    return {"message": "Producto asociado exitosamente al empleado"}
+
+@app.delete("/empleados/{empleado_id}/productos/{producto_id}")
+def retirar_producto_empleado(
+    empleado_id: int,
+    producto_id: int,
+    observacion: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    empleado = db.query(models.Empleado).filter(models.Empleado.id == empleado_id).first()
+    producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
+    
+    if not empleado or not producto:
+        raise HTTPException(status_code=404, detail="Empleado o producto no encontrado")
+    
+    if producto not in empleado.productos:
+        raise HTTPException(status_code=400, detail="El producto no está asociado a este empleado")
+    
+    # Buscar registro de inventario activo
+    inventario = db.query(models.Inventory).filter(
+        models.Inventory.empleado_id == empleado_id,
+        models.Inventory.producto_id == producto_id,
+        models.Inventory.is_active == True
+    ).first()
+    
+    if inventario:
+        inventario.is_active = False
+        inventario.fecha_retiro = datetime.now()
+        
+        # Crear registro en historial
+        historial = models.HistorialInventario(
+            inventory_id=inventario.id,
+            empleado_id=empleado_id,
+            producto_id=producto_id,
+            accion='retiro',
+            observacion=observacion or f"Producto retirado el {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            created_by_id=current_user.id
+        )
+        db.add(historial)
+    
+    # Remover producto del empleado
+    empleado.productos.remove(producto)
+    db.commit()
+    
+    return {"message": "Producto retirado exitosamente del empleado"}
+
 # --- ENDPOINTS INVENTARIO ---
 
 @app.post("/inventory/", response_model=schemas.InventoryOut)
 def create_item(item: schemas.InventoryCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    new_item = models.Inventory(**item.dict(), created_by_id=current_user.id)
+    # Verificar si ya existe un registro activo con el mismo empleado y producto
+    existing = db.query(models.Inventory).filter(
+        models.Inventory.empleado_id == item.empleado_id,
+        models.Inventory.producto_id == item.producto_id,
+        models.Inventory.is_active == True
+    ).first()
+    
+    if existing:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Ya existe un registro activo para este empleado y producto (ID: {existing.id})"
+        )
+    
+    # Obtener empleado para usar su sede si no se proporciona
+    empleado = db.query(models.Empleado).filter(models.Empleado.id == item.empleado_id).first()
+    if not empleado:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    
+    # Usar sede del empleado si no se proporciona
+    sede_id = item.sede_id if item.sede_id else empleado.ciudad_id
+    
+    item_dict = item.dict()
+    item_dict['sede_id'] = sede_id
+    new_item = models.Inventory(**item_dict, created_by_id=current_user.id)
     db.add(new_item)
+    
+    # Crear registro en historial
+    historial = models.HistorialInventario(
+        inventory_id=None,  # Se actualizará después del commit
+        empleado_id=item.empleado_id,
+        producto_id=item.producto_id,
+        accion='asignacion',
+        observacion=item.observacion,
+        created_by_id=current_user.id
+    )
+    db.add(historial)
+    db.flush()
+    
+    # Asociar producto al empleado si no existe
+    producto = db.query(models.Producto).filter(models.Producto.id == item.producto_id).first()
+    if empleado and producto and producto not in empleado.productos:
+        empleado.productos.append(producto)
+    
     db.commit()
     db.refresh(new_item)
+    
+    # Actualizar historial con inventory_id
+    historial.inventory_id = new_item.id
+    db.commit()
+    
     return new_item
 
 @app.get("/inventory/", response_model=List[schemas.InventoryOut])
-def get_inventory(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    if current_user.is_admin:
-        return db.query(models.Inventory).all()
-    return db.query(models.Inventory).filter(models.Inventory.is_active == True).all()
+def get_inventory(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user), skip: int = 0, limit: int = 10):
+    query = db.query(models.Inventory)
+    if not current_user.is_admin:
+        query = query.filter(models.Inventory.is_active == True)
+    total = query.count()
+    items = query.offset(skip).limit(limit).all()
+    return items
+
+@app.get("/inventory/count")
+def get_inventory_count(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    query = db.query(models.Inventory)
+    if not current_user.is_admin:
+        query = query.filter(models.Inventory.is_active == True)
+    return {"total": query.count()}
 
 # --- ENDPOINTS TABLAS INDEPENDIENTES ---
 
@@ -134,7 +399,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), current
     if db_user:
         raise HTTPException(status_code=400, detail="El usuario ya existe")
     hashed_pw = auth.get_password_hash(user.password)
-    new_user = models.User(username=user.username, full_name=user.full_name, password_hash=hashed_pw, is_admin=False)
+    new_user = models.User(username=user.username, full_name=user.full_name, password_hash=hashed_pw, is_admin=user.is_admin if user.is_admin is not None else False)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -146,7 +411,7 @@ def list_users(db: Session = Depends(get_db), current_user: models.User = Depend
 
 @app.post("/cargos/", response_model=schemas.CatalogOut)
 def create_cargo(obj: schemas.CatalogBase, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
-    new_obj = models.Cargo(nombre=obj.nombre)
+    new_obj = models.Cargo(nombre=obj.nombre, created_by_id=current_user.id)
     db.add(new_obj)
     db.commit()
     db.refresh(new_obj)
@@ -162,27 +427,108 @@ def create_ciudad(obj: schemas.CatalogBase, db: Session = Depends(get_db), curre
 
 @app.post("/equipo_tipos/", response_model=schemas.CatalogOut)
 def create_equipo_tipo(obj: schemas.CatalogBase, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
-    new_obj = models.EquipoTipo(nombre=obj.nombre)
+    new_obj = models.EquipoTipo(nombre=obj.nombre, created_by_id=current_user.id)
     db.add(new_obj)
     db.commit()
     db.refresh(new_obj)
     return new_obj
 
+# --- ENDPOINT PUT ESPECÍFICO PARA INVENTORY (DEBE IR ANTES DE LOS GENÉRICOS) ---
 @app.put("/inventory/{item_id}", response_model=schemas.InventoryOut)
-def update_inventory(item_id: int, data: schemas.InventoryCreate, db: Session = Depends(get_db), admin: models.User = Depends(get_current_admin_user)
-):
+def update_inventory(item_id: int, data: schemas.InventoryCreate, db: Session = Depends(get_db), admin: models.User = Depends(get_current_admin_user)):
     # BUSCAR EL REGISTRO
     item = db.query(models.Inventory).filter(models.Inventory.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
     
+    # Guardar valores anteriores para el historial
+    old_empleado_id = item.empleado_id
+    old_producto_id = item.producto_id
+    
     # ACTUALIZAR CAMPOS
-    for key, value in data.dict().items():
+    data_dict = data.model_dump() if hasattr(data, 'model_dump') else data.dict()
+    for key, value in data_dict.items():
         setattr(item, key, value)
+    
+    # Crear registro en historial si cambió empleado o producto
+    if old_empleado_id != data.empleado_id or old_producto_id != data.producto_id:
+        historial = models.HistorialInventario(
+            inventory_id=item_id,
+            empleado_id=data.empleado_id,
+            producto_id=data.producto_id,
+            accion='cambio' if old_empleado_id != data.empleado_id or old_producto_id != data.producto_id else 'actualizacion',
+            observacion=data.observacion,
+            created_by_id=admin.id
+        )
+        db.add(historial)
+        
+        # Actualizar relaciones empleado-producto
+        empleado = db.query(models.Empleado).filter(models.Empleado.id == data.empleado_id).first()
+        producto = db.query(models.Producto).filter(models.Producto.id == data.producto_id).first()
+        if empleado and producto and producto not in empleado.productos:
+            empleado.productos.append(producto)
     
     db.commit()
     db.refresh(item)
     return item
+
+# --- ENDPOINTS PUT Y DELETE PARA CATÁLOGOS (GENÉRICOS - DEBEN IR DESPUÉS DE LOS ESPECÍFICOS) ---
+CATALOG_MODELS = {
+    "areas": models.Area,
+    "empresas": models.Empresa,
+    "cargos": models.Cargo,
+    "ciudades": models.Ciudad,
+    "equipo_tipos": models.EquipoTipo
+}
+
+@app.put("/{catalog_type}/{item_id}", response_model=schemas.CatalogOut)
+def update_catalog_item(
+    catalog_type: str,
+    item_id: int,
+    item: schemas.CatalogCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_admin_user)
+):
+    if catalog_type not in CATALOG_MODELS:
+        raise HTTPException(status_code=404, detail="Catálogo no encontrado")
+    
+    Model = CATALOG_MODELS[catalog_type]
+    db_item = db.query(Model).filter(Model.id == item_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Item no encontrado")
+    
+    db_item.nombre = item.nombre
+    db_item.updated_at = datetime.now()
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+@app.delete("/{catalog_type}/{item_id}")
+def delete_catalog_item(
+    catalog_type: str,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_admin_user)
+):
+    if catalog_type not in CATALOG_MODELS:
+        raise HTTPException(status_code=404, detail="Catálogo no encontrado")
+    
+    Model = CATALOG_MODELS[catalog_type]
+    db_item = db.query(Model).filter(Model.id == item_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Item no encontrado")
+    
+    db_item.is_active = False
+    db_item.updated_at = datetime.now()
+    db.commit()
+    return {"message": "Item eliminado exitosamente"}
+
+@app.get("/inventory/{item_id}/historial", response_model=List[schemas.HistorialOut])
+def get_historial_inventory(item_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    historial = db.query(models.HistorialInventario).filter(
+        models.HistorialInventario.inventory_id == item_id
+    ).order_by(models.HistorialInventario.fecha_accion.desc()).all()
+    return historial
 
 @app.get("/users/me", response_model=schemas.UserOut)
 def read_users_me(current_user: models.User = Depends(get_current_user)):
@@ -192,13 +538,34 @@ def read_users_me(current_user: models.User = Depends(get_current_user)):
 def retirar_equipo(
     item_id: int, 
     db: Session = Depends(get_db), 
-    admin: models.User = Depends(get_current_admin_user)
+    admin: models.User = Depends(get_current_admin_user),
+    fecha_retiro: Optional[str] = None
 ):
     item = db.query(models.Inventory).filter(models.Inventory.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Registro no encontrado")
     
-    item.is_active = False  # Cambiamos a estado Retirado
+    item.is_active = False
+    
+    # Parsear fecha si se proporciona
+    if fecha_retiro:
+        try:
+            item.fecha_retiro = datetime.fromisoformat(fecha_retiro.replace('Z', '+00:00'))
+        except:
+            item.fecha_retiro = datetime.now()
+    else:
+        item.fecha_retiro = datetime.now()
+    
+    # Crear registro en historial
+    historial = models.HistorialInventario(
+        inventory_id=item_id,
+        empleado_id=item.empleado_id,
+        producto_id=item.producto_id,
+        accion='retiro',
+        observacion=f"Equipo retirado el {item.fecha_retiro.strftime('%Y-%m-%d %H:%M:%S')}",
+        created_by_id=admin.id
+    )
+    db.add(historial)
     db.commit()
     return {"message": "Equipo retirado exitosamente"}
 
@@ -221,29 +588,34 @@ async def export_inventory_excel(current_user: models.User = Depends(get_current
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="No tiene permisos para generar reportes")
 
-    # 1. Obtener datos de la DB (Ajusta según tu ORM)
-    # Ejemplo: items = db.query(Inventory).all()
     items = db.query(models.Inventory).all()
 
     data = []
     for item in items:
+        empleado = item.empleado
+        producto = item.producto
+        sede = item.sede or (empleado.ciudad if empleado else None)
         data.append({
-            "Fecha": item.created_at.strftime('%d/%m/%Y'),
-            "Responsable": item.empleado_nombre,
-            "Cargo": item.cargo.nombre if item.cargo else "N/A",
-            "Área": item.area.nombre if item.area else "N/A",
-            "Quién Entrega": item.quien_entrega,
-            "Empresa": item.empresa.nombre if item.empresa else "N/A",
-            "Ciudad": item.ciudad.nombre if item.ciudad else "N/A",
-            "Tipo Equipo": item.equipo.nombre if item.equipo else "N/A",
-            "Cantidad": item.cantidad,
-            "Marca": item.marca if item.marca else "",
-            "Características": item.caracteristicas,
-            "Observación": item.observacion,
+            "Fecha Asignación": item.fecha_asignacion.strftime('%d/%m/%Y') if item.fecha_asignacion else "N/A",
+            "Fecha Retiro": item.fecha_retiro.strftime('%d/%m/%Y') if item.fecha_retiro else "N/A",
+            "Responsable": empleado.nombre if empleado else "N/A",
+            "Cargo": empleado.cargo.nombre if empleado and empleado.cargo else "N/A",
+            "Área": empleado.area.nombre if empleado and empleado.area else "N/A",
+            "Empresa": empleado.empresa.nombre if empleado and empleado.empresa else "N/A",
+            "Ciudad": empleado.ciudad.nombre if empleado and empleado.ciudad else "N/A",
+            "Sede": sede.nombre if sede else (empleado.ciudad.nombre if empleado and empleado.ciudad else "N/A"),
+            "Marca": producto.marca if producto and producto.marca else "N/A",
+            "Referencia": producto.referencia if producto and producto.referencia else "",
+            "Tipo Equipo": producto.tipo.nombre if producto and producto.tipo else "N/A",
+            "Memoria RAM": producto.memoria_ram if producto and producto.memoria_ram else "",
+            "Disco Duro": producto.disco_duro if producto and producto.disco_duro else "",
+            "Serial": producto.serial if producto and producto.serial else "",
+            "Observaciones Producto": producto.observaciones if producto and producto.observaciones else "",
+            "Quién Entrega": item.quien_entrega if item.quien_entrega else "N/A",
+            "Observación": item.observacion if item.observacion else "",
             "Estado": "ACTIVO" if item.is_active else "RETIRADO"
         })
 
-    # 2. Crear Excel en memoria usando Pandas
     df = pd.DataFrame(data)
     output = io.BytesIO()
     
@@ -263,74 +635,368 @@ async def export_inventory_excel(current_user: models.User = Depends(get_current
 @app.post("/inventory/upload-masivo")
 async def bulk_upload_inventory(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
     contents = await file.read()
-    # Leemos el Excel
     df = pd.read_excel(io.BytesIO(contents))
 
+    empleados_creados = 0
+    productos_creados = 0
     registros_creados = 0
     
     for _, row in df.iterrows():
         try:
-            # Si la celda está vacía en el Excel, podrías definir un default o saltarlo
-            # Usamos dayfirst=True para formato dd/mm/yyyy
-            fecha_excel = pd.to_datetime(row['Fecha'], dayfirst=True).to_pydatetime()
+            fecha_excel = pd.to_datetime(row.get('Fecha', datetime.now()), dayfirst=True).to_pydatetime() if pd.notna(row.get('Fecha')) else datetime.now()
         except:
-            # Si hay un error en el formato de fecha del Excel, usa la actual o reporta error
             fecha_excel = datetime.now()
         
         # Buscar o crear Cargo
-        cargo = db.query(models.Cargo).filter(models.Cargo.nombre == row['Cargo']).first()
-        if not cargo:
-            cargo = models.Cargo(nombre=row['Cargo'], created_by_id=current_user.id)
-            db.add(cargo)
-            db.flush()
+        cargo_nombre = row.get('Cargo', '')
+        cargo = None
+        if cargo_nombre and pd.notna(cargo_nombre):
+            cargo = db.query(models.Cargo).filter(models.Cargo.nombre == cargo_nombre).first()
+            if not cargo:
+                cargo = models.Cargo(nombre=cargo_nombre, created_by_id=current_user.id)
+                db.add(cargo)
+                db.flush()
         
         # Buscar o crear Area
-        area = db.query(models.Area).filter(models.Area.nombre == row['Área']).first()
-        if not area:
-            area = models.Area(nombre=row['Área'], created_by_id=current_user.id)
-            db.add(area)
-            db.flush()
+        area_nombre = row.get('Área', '')
+        area = None
+        if area_nombre and pd.notna(area_nombre):
+            area = db.query(models.Area).filter(models.Area.nombre == area_nombre).first()
+            if not area:
+                area = models.Area(nombre=area_nombre, created_by_id=current_user.id)
+                db.add(area)
+                db.flush()
         
         # Buscar o crear Empresa
-        empresa = db.query(models.Empresa).filter(models.Empresa.nombre == row['Empresa']).first()
-        if not empresa:
-            empresa = models.Empresa(nombre=row['Empresa'], created_by_id=current_user.id)
-            db.add(empresa)
-            db.flush()
+        empresa_nombre = row.get('Empresa', '')
+        empresa = None
+        if empresa_nombre and pd.notna(empresa_nombre):
+            empresa = db.query(models.Empresa).filter(models.Empresa.nombre == empresa_nombre).first()
+            if not empresa:
+                empresa = models.Empresa(nombre=empresa_nombre, created_by_id=current_user.id)
+                db.add(empresa)
+                db.flush()
         
         # Buscar o crear EquipoTipo
-        equipo = db.query(models.EquipoTipo).filter(models.EquipoTipo.nombre == row['Tipo Equipo']).first()
-        if not equipo:
-            equipo = models.EquipoTipo(nombre=row['Tipo Equipo'], created_by_id=current_user.id)
-            db.add(equipo)
-            db.flush()
+        tipo_nombre = row.get('Tipo Equipo', '')
+        tipo = None
+        if tipo_nombre and pd.notna(tipo_nombre):
+            tipo = db.query(models.EquipoTipo).filter(models.EquipoTipo.nombre == tipo_nombre).first()
+            if not tipo:
+                tipo = models.EquipoTipo(nombre=tipo_nombre, created_by_id=current_user.id)
+                db.add(tipo)
+                db.flush()
         
         # Buscar o crear Ciudad
-        ciudad = db.query(models.Ciudad).filter(models.Ciudad.nombre == row['Ciudad']).first()
-        if not ciudad:
-            ciudad = models.Ciudad(nombre=row['Ciudad'])
-            db.add(ciudad)
+        ciudad_nombre = row.get('Ciudad', '')
+        ciudad = None
+        if ciudad_nombre and pd.notna(ciudad_nombre):
+            ciudad = db.query(models.Ciudad).filter(models.Ciudad.nombre == ciudad_nombre).first()
+            if not ciudad:
+                ciudad = models.Ciudad(nombre=ciudad_nombre)
+                db.add(ciudad)
+                db.flush()
+        
+        # Buscar o crear Empleado
+        empleado_nombre = row.get('Responsable', '')
+        if not empleado_nombre or pd.isna(empleado_nombre):
+            continue  # Saltar filas sin responsable
+            
+        empleado = db.query(models.Empleado).filter(
+            models.Empleado.nombre == empleado_nombre,
+            models.Empleado.cargo_id == (cargo.id if cargo else None),
+            models.Empleado.area_id == (area.id if area else None),
+            models.Empleado.empresa_id == (empresa.id if empresa else None)
+        ).first()
+        
+        if not empleado and cargo and area and empresa and ciudad:
+            empleado = models.Empleado(
+                nombre=empleado_nombre,
+                cargo_id=cargo.id,
+                area_id=area.id,
+                empresa_id=empresa.id,
+                ciudad_id=ciudad.id,
+                created_by_id=current_user.id
+            )
+            db.add(empleado)
+            db.flush()
+            empleados_creados += 1
+        
+        # Buscar o crear Producto
+        marca = row.get('Marca', '')
+        if not marca or pd.isna(marca):
+            continue  # La marca es requerida
+        
+        referencia = row.get('Referencia', '') if pd.notna(row.get('Referencia')) else None
+        memoria_ram = row.get('Memoria RAM', '') if pd.notna(row.get('Memoria RAM')) else None
+        disco_duro = row.get('Disco Duro', '') if pd.notna(row.get('Disco Duro')) else None
+        serial = row.get('Serial', '') if pd.notna(row.get('Serial')) else None
+        observaciones_prod = row.get('Observaciones Producto', '') if pd.notna(row.get('Observaciones Producto')) else None
+        
+        # Buscar producto por serial si existe, o por marca+referencia
+        producto = None
+        if serial:
+            producto = db.query(models.Producto).filter(models.Producto.serial == serial).first()
+        
+        if not producto and referencia:
+            producto = db.query(models.Producto).filter(
+                models.Producto.marca == marca,
+                models.Producto.referencia == referencia
+            ).first()
+        
+        if not producto:
+            if not tipo:
+                continue  # Necesitamos tipo para crear producto
+            producto = models.Producto(
+                marca=marca,
+                referencia=referencia,
+                memoria_ram=memoria_ram,
+                disco_duro=disco_duro,
+                serial=serial,
+                observaciones=observaciones_prod,
+                tipo_id=tipo.id,
+                created_by_id=current_user.id
+            )
+            db.add(producto)
+            db.flush()
+            productos_creados += 1
+        
+        # Si no se pudo crear empleado o producto, continuar
+        if not empleado or not producto:
+            continue
+        
+        # Asociar producto al empleado si no existe
+        if producto not in empleado.productos:
+            empleado.productos.append(producto)
             db.flush()
         
+        # Obtener sede (del campo Sede o Ciudad)
+        sede_nombre = row.get('Sede', '') or ciudad_nombre
+        sede = None
+        if sede_nombre and pd.notna(sede_nombre):
+            sede = db.query(models.Ciudad).filter(models.Ciudad.nombre == sede_nombre).first()
+            if not sede:
+                sede = ciudad  # Usar ciudad si no se encuentra sede
+        
+        # Crear registro de inventario
         new_item = models.Inventory(
-            empleado_nombre=row['Responsable'],
-            cantidad=row['Cantidad'],
-            marca=row.get('Marca', '') if pd.notna(row.get('Marca')) else '',
-            caracteristicas=row['Características'],
+            empleado_id=empleado.id,
+            producto_id=producto.id,
+            sede_id=sede.id if sede else empleado.ciudad_id,
+            fecha_asignacion=fecha_excel,
+            quien_entrega=row.get('Quién Entrega', '') if pd.notna(row.get('Quién Entrega')) else None,
+            observacion=row.get('Observación', '') if pd.notna(row.get('Observación')) else None,
             is_active=True,
-            created_at=fecha_excel,
-            cargo_id=cargo.id,
-            area_id=area.id,
-            empresa_id=empresa.id,
-            equipo_id=equipo.id,
-            ciudad_id=ciudad.id,
-            quien_entrega=row['Quién Entrega'],
-            observacion=row['Observación'],
             created_by_id=current_user.id
         )
         db.add(new_item)
+        db.flush()
+        
+        # Crear registro en historial
+        historial = models.HistorialInventario(
+            inventory_id=None,  # Se actualizará después del commit
+            empleado_id=empleado.id,
+            producto_id=producto.id,
+            accion='asignacion',
+            observacion=f"Carga masiva - {row.get('Observación', '') if pd.notna(row.get('Observación')) else ''}",
+            created_by_id=current_user.id
+        )
+        db.add(historial)
+        db.flush()
+        
+        historial.inventory_id = new_item.id
         db.commit()
         db.refresh(new_item)
         registros_creados += 1
 
-    return {"message": f"Carga exitosa: {registros_creados} nuevos registros con sus fechas originales."}
+    return {
+        "message": f"Carga exitosa: {empleados_creados} empleados, {productos_creados} productos, {registros_creados} registros de inventario creados."
+    }
+
+# --- ENDPOINTS PDF ---
+
+def generate_pdf_content(inventory_item, tipo='asignacion'):
+    """Genera contenido PDF para asignación o retiro de equipo"""
+    if not REPORTLAB_AVAILABLE:
+        raise HTTPException(status_code=500, detail="ReportLab no está instalado. Instale con: pip install reportlab")
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
+    story = []
+    styles = getSampleStyleSheet()
+    
+    # Título
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        textColor=colors.HexColor('#1e40af'),
+        spaceAfter=30,
+        alignment=1  # Center
+    )
+    
+    title_text = "ACTA DE ASIGNACIÓN DE EQUIPO" if tipo == 'asignacion' else "ACTA DE RETIRO DE EQUIPO"
+    story.append(Paragraph(title_text, title_style))
+    story.append(Spacer(1, 0.5*cm))
+    
+    # Información del empleado
+    empleado = inventory_item.empleado
+    producto = inventory_item.producto
+    # Intentar obtener sede del inventory_item, si no existe, usar ciudad del empleado
+    sede = None
+    if hasattr(inventory_item, 'sede') and inventory_item.sede:
+        sede = inventory_item.sede
+    elif empleado and hasattr(empleado, 'ciudad') and empleado.ciudad:
+        sede = empleado.ciudad
+    
+    # Datos en formato tabla
+    data = [
+        ['<b>FECHA:</b>', inventory_item.fecha_asignacion.strftime('%d/%m/%Y %H:%M') if tipo == 'asignacion' and inventory_item.fecha_asignacion else 
+                           (inventory_item.fecha_retiro.strftime('%d/%m/%Y %H:%M') if inventory_item.fecha_retiro else datetime.now().strftime('%d/%m/%Y %H:%M'))],
+    ]
+    
+    if empleado:
+        data.append(['<b>EMPLEADO:</b>', empleado.nombre or 'N/A'])
+        if empleado.cargo:
+            data.append(['<b>CARGO:</b>', empleado.cargo.nombre])
+        if empleado.area:
+            data.append(['<b>ÁREA:</b>', empleado.area.nombre])
+        if empleado.empresa:
+            data.append(['<b>EMPRESA:</b>', empleado.empresa.nombre])
+    
+    if sede:
+        data.append(['<b>SEDE:</b>', sede.nombre])
+    
+    if inventory_item.quien_entrega:
+        data.append(['<b>QUIÉN ENTREGA:</b>', inventory_item.quien_entrega])
+    
+    story.append(Spacer(1, 0.3*cm))
+    
+    # Tabla de información básica
+    table = Table(data, colWidths=[5*cm, 12*cm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f1f5f9')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+    ]))
+    story.append(table)
+    
+    story.append(Spacer(1, 0.5*cm))
+    
+    # Información del producto
+    product_title = Paragraph("<b>ESPECIFICACIONES DEL EQUIPO:</b>", styles['Heading2'])
+    story.append(product_title)
+    story.append(Spacer(1, 0.3*cm))
+    
+    product_data = []
+    if producto:
+        if producto.marca:
+            product_data.append(['<b>Marca:</b>', producto.marca])
+        if producto.referencia:
+            product_data.append(['<b>Referencia:</b>', producto.referencia])
+        if producto.tipo:
+            product_data.append(['<b>Tipo de Equipo:</b>', producto.tipo.nombre])
+        if producto.serial:
+            product_data.append(['<b>Serial:</b>', producto.serial])
+        if producto.memoria_ram:
+            product_data.append(['<b>Memoria RAM:</b>', producto.memoria_ram])
+        if producto.disco_duro:
+            product_data.append(['<b>Disco Duro:</b>', producto.disco_duro])
+        if producto.observaciones:
+            product_data.append(['<b>Observaciones:</b>', producto.observaciones])
+    
+    if inventory_item.observacion:
+        product_data.append(['<b>Observación General:</b>', inventory_item.observacion])
+    
+    if product_data:
+        product_table = Table(product_data, colWidths=[5*cm, 12*cm])
+        product_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f1f5f9')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(product_table)
+    
+    story.append(Spacer(1, 1*cm))
+    
+    # Firma
+    signature_text = "Firma del Empleado: _________________________" if tipo == 'asignacion' else "Firma del Empleado: _________________________"
+    story.append(Paragraph(signature_text, styles['Normal']))
+    story.append(Spacer(1, 0.5*cm))
+    story.append(Paragraph("Firma de Quien Entrega: _________________________", styles['Normal']))
+    
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+@app.get("/inventory/{item_id}/pdf-asignacion")
+def generar_pdf_asignacion(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Genera PDF de asignación de equipo"""
+    from sqlalchemy.orm import joinedload
+    inventory_item = db.query(models.Inventory)\
+        .options(
+            joinedload(models.Inventory.empleado).joinedload(models.Empleado.cargo),
+            joinedload(models.Inventory.empleado).joinedload(models.Empleado.area),
+            joinedload(models.Inventory.empleado).joinedload(models.Empleado.empresa),
+            joinedload(models.Inventory.empleado).joinedload(models.Empleado.ciudad),
+            joinedload(models.Inventory.producto).joinedload(models.Producto.tipo),
+            joinedload(models.Inventory.sede)
+        )\
+        .filter(models.Inventory.id == item_id).first()
+    if not inventory_item:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    
+    buffer = generate_pdf_content(inventory_item, tipo='asignacion')
+    
+    filename = f"Acta_Asignacion_{inventory_item.id}_{datetime.now().strftime('%Y%m%d')}.pdf"
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@app.get("/inventory/{item_id}/pdf-retiro")
+def generar_pdf_retiro(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Genera PDF de retiro de equipo"""
+    from sqlalchemy.orm import joinedload
+    inventory_item = db.query(models.Inventory)\
+        .options(
+            joinedload(models.Inventory.empleado).joinedload(models.Empleado.cargo),
+            joinedload(models.Inventory.empleado).joinedload(models.Empleado.area),
+            joinedload(models.Inventory.empleado).joinedload(models.Empleado.empresa),
+            joinedload(models.Inventory.empleado).joinedload(models.Empleado.ciudad),
+            joinedload(models.Inventory.producto).joinedload(models.Producto.tipo),
+            joinedload(models.Inventory.sede)
+        )\
+        .filter(models.Inventory.id == item_id).first()
+    if not inventory_item:
+        raise HTTPException(status_code=404, detail="Registro no encontrado")
+    
+    buffer = generate_pdf_content(inventory_item, tipo='retiro')
+    
+    filename = f"Acta_Retiro_{inventory_item.id}_{datetime.now().strftime('%Y%m%d')}.pdf"
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )

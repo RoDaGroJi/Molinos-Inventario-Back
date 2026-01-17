@@ -1,4 +1,4 @@
-#!/home/inge29/molinos/inventory-back/venv/bin/python3
+#!/home/work/propios/molinos/Molinos-Inventario-Back/venv/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys
