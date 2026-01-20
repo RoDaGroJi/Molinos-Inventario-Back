@@ -147,7 +147,15 @@ def delete_empleado(
 # --- ENDPOINTS PRODUCTOS ---
 
 @app.post("/productos/", response_model=schemas.ProductoOut)
-def create_producto(producto: schemas.ProductoCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def create_producto(
+    producto: schemas.ProductoCreate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    # Validar si ya existe un producto con el mismo serial
+    existing_producto = db.query(models.Producto).filter(models.Producto.serial == producto.serial).first()
+    if existing_producto:
+        raise HTTPException(status_code=400, detail="Ya existe un producto con ese serial")
     new_producto = models.Producto(**producto.dict(), created_by_id=current_user.id)
     db.add(new_producto)
     db.commit()
