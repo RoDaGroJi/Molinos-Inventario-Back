@@ -964,8 +964,9 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     firma_style = ParagraphStyle(
         name="firma_style",
         parent=styles["Normal"],
-        alignment=0,          # Izquierda
-        spaceAfter=4
+        fontSize=10,
+        leading=12,
+        alignment=0
     )
 
     linea_firma = "_____________________________"
@@ -973,29 +974,36 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     entrega = Table(
         [
             [Paragraph("<b>ENTREGA</b>", firma_style)],
+            [""],
             [Paragraph(linea_firma, firma_style)],
             [Paragraph(f"Nombre: {inventory_item.quien_entrega}" or "", firma_style)],
             [Paragraph(" ", firma_style)],
         ],
         colWidths=[7.5 * cm],
+        rowHeights=[0.6*cm, 1.6*cm, 0.6*cm, 0.5*cm, 0.5*cm]
     )
 
     recibe = Table(
         [
             [Paragraph("<b>RECIBE</b>", firma_style)],
+            [""],
             [Paragraph(linea_firma, firma_style)],
             [Paragraph(f"Nombre: {empleado.nombre}", firma_style)],
             [Paragraph(f"Cargo: {empleado.cargo.nombre if empleado.cargo else ""}", firma_style)],
         ],
         colWidths=[7.5 * cm],
+        rowHeights=[0.6*cm, 1.6*cm, 0.6*cm, 0.5*cm, 0.5*cm]
     )
 
     firmas = Table(
         [[entrega, recibe]],
-        colWidths=[7.5 * cm, 7.5 * cm],
-        rowHeights=[4.2 * cm],
+        colWidths=[7.5 * cm, 7.5 * cm]
     )
-
+    firmas.setStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+    ])
+    
+    story.append(Spacer(1, 1.2 * cm))
     story.append(firmas)
 
     doc.build(story)
