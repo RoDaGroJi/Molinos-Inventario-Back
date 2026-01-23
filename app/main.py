@@ -825,133 +825,170 @@ async def bulk_upload_inventory(file: UploadFile = File(...), db: Session = Depe
         "message": f"Carga exitosa: {empleados_creados} empleados, {productos_creados} productos, {registros_creados} registros de inventario creados."
 
 def generate_pdf_content(inventory_item, tipo='asignacion'):
-    """Genera contenido PDF para asignación o retiro de equipo utilizando plantilla PDF, colocando la información más abajo en la página."""
+    """
+    Genera contenido PDF para asignación o retiro de equipo utilizando la plantilla corporativa,
+    con formato alineado según muestra el acta física (ver imagen y detalle de prompt).
+    """
     if not REPORTLAB_AVAILABLE:
         raise HTTPException(status_code=500, detail="ReportLab no está instalado. Instale con: pip install reportlab")
 
+    import tempfile
+    from datetime import datetime
+    from PyPDF2 import PdfWriter, PdfReader
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    import os
+
+    # Ruta de la plantilla
     plantilla_path = os.path.join(os.path.dirname(__file__), "plantilla", "HOJA_MEMBRETE_MOLINOS.pdf")
 
-    # --- Crear PDF temporal para el contenido dinámico ---
+    # Crear PDF temporal con el contenido dinámico
     data_buffer = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     c = canvas.Canvas(data_buffer.name, pagesize=A4)
 
-    # --- Definimos el margen superior más bajo para colocar la información más abajo ---
-    # Puedes ajustar MARGIN_TOP según el diseño de la plantilla PDF (por ejemplo, rebajado unos 6-7cm)
-    MARGIN_TOP = 7.7 * cm  # Más bajo para que todo baje
-    LEFT_MARGIN = 2.1 * cm  # Leve ajuste lateral
+    # Márgenes y posiciones alineados según el ejemplo físico escaneado
+    LEFT_MARGIN = 2.2 * cm
+    RIGHT_MARGIN = 2.2 * cm
+    WIDTH, HEIGHT = A4
 
-    # Título (más abajo)
-    title_text = "ACTA DE ASIGNACIÓN DE EQUIPO" if tipo == 'asignacion' else "ACTA DE RETIRO DE EQUIPO"
-    c.setFont("Helvetica-Bold", 16)
-    c.setFillColor('#1e40af')
-    c.drawCentredString(A4[0] / 2, A4[1] - MARGIN_TOP, title_text)
-    c.setFillColor('black')
-    y = A4[1] - MARGIN_TOP - 1.3 * cm
+    # La información empieza más abajo (debajo del header fijo)
+    cursor_y = HEIGHT - 6.8*cm  # Ajustado para quedar debajo del encabezado de la plantilla
 
-    # Información del empleado y equipo en líneas tipo "formulario"
+    # Ciudad y fecha (alineado derecha, "Barranquilla, 21 de Enero de 202X")
     empleado = inventory_item.empleado
-    producto = inventory_item.producto
+    sede = inventory_item.sede if hasattr(inventory_item, 'sede') and inventory_item.sede else (empleado.ciudad if empleado and hasattr(empleado, 'ciudad') else None)
+    ciudad_nombre = sede.nombre if sede else "Barranquilla"
+    fecha_asignacion = inventory_item.fecha_asignacion if (tipo == 'asignacion' and inventory_item.fecha_asignacion) else (
+        inventory_item.fecha_retiro if inventory_item.fecha_retiro else datetime.now())
+    # Fecha formato: 21 de Enero de 202X
+    meses_es = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    fecha_q = fecha_asignacion
+    fecha_texto = f"{ciudad_nombre}, {fecha_q.day} de {meses_es[fecha_q.month-1].capitalize()} de {fecha_q.year}"
+    c.setFont("Helvetica", 11)
+    c.drawRightString(WIDTH - RIGHT_MARGIN, cursor_y, fecha_texto)
+    cursor_y -= 1.4*cm
 
-    sede = None
-    if hasattr(inventory_item, 'sede') and inventory_item.sede:
-        sede = inventory_item.sede
-    elif empleado and hasattr(empleado, 'ciudad') and empleado.ciudad:
-        sede = empleado.ciudad
+    # ACTA DE ENTREGA / RETIRO (centrado)
+    title_text = "ACTA DE ENTREGA" if tipo == 'asignacion' else "ACTA DE RETIRO"
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(WIDTH/2, cursor_y, title_text)
+    cursor_y -= 1.3*cm
 
-    # Fecha
-    fecha_valor = inventory_item.fecha_asignacion.strftime('%d/%m/%Y %H:%M') if tipo == 'asignacion' and inventory_item.fecha_asignacion \
-        else (inventory_item.fecha_retiro.strftime('%d/%m/%Y %H:%M') if inventory_item.fecha_retiro else datetime.now().strftime('%d/%m/%Y %H:%M'))
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(LEFT_MARGIN, y, "FECHA:")
-    c.setFont("Helvetica", 10)
-    c.drawString(LEFT_MARGIN + 2.7*cm, y, fecha_valor)
-    y -= 0.7*cm
-
-    if empleado:
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(LEFT_MARGIN, y, "EMPLEADO:")
-        c.setFont("Helvetica", 10)
-        c.drawString(LEFT_MARGIN + 2.7*cm, y, str(empleado.nombre or 'N/A'))
-        y -= 0.6*cm
-
-        if empleado.cargo:
-            c.setFont("Helvetica-Bold", 10)
-            c.drawString(LEFT_MARGIN, y, "CARGO:")
-            c.setFont("Helvetica", 10)
-            c.drawString(LEFT_MARGIN + 2.7*cm, y, str(empleado.cargo.nombre))
-            y -= 0.6*cm
-
-        if empleado.area:
-            c.setFont("Helvetica-Bold", 10)
-            c.drawString(LEFT_MARGIN, y, "ÁREA:")
-            c.setFont("Helvetica", 10)
-            c.drawString(LEFT_MARGIN + 2.7*cm, y, str(empleado.area.nombre))
-            y -= 0.6*cm
-
-        if empleado.empresa:
-            c.setFont("Helvetica-Bold", 10)
-            c.drawString(LEFT_MARGIN, y, "EMPRESA:")
-            c.setFont("Helvetica", 10)
-            c.drawString(LEFT_MARGIN + 2.7*cm, y, str(empleado.empresa.nombre))
-            y -= 0.6*cm
-
-    if sede:
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(LEFT_MARGIN, y, "SEDE:")
-        c.setFont("Helvetica", 10)
-        c.drawString(LEFT_MARGIN + 2.7*cm, y, str(sede.nombre))
-        y -= 0.6*cm
-
-    if inventory_item.quien_entrega:
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(LEFT_MARGIN, y, "QUIÉN ENTREGA:")
-        c.setFont("Helvetica", 10)
-        c.drawString(LEFT_MARGIN + 2.7*cm, y, str(inventory_item.quien_entrega))
-        y -= 0.7*cm
-
-    # Espacio antes de especificaciones
-    y -= 0.45*cm
+    # Datos del destinatario destinatario
+    c.setFont("Helvetica-Bold", 10.5)
+    c.drawString(LEFT_MARGIN, cursor_y, "Señor(a):")
+    c.setFont("Helvetica", 10.5)
+    c.drawString(LEFT_MARGIN + 2*cm, cursor_y, str(empleado.nombre) if empleado and empleado.nombre else "N/A")
+    cursor_y -= 0.55*cm
 
     c.setFont("Helvetica-Bold", 10.5)
-    c.drawString(LEFT_MARGIN, y, "ESPECIFICACIONES DEL EQUIPO:")
-    y -= 0.6*cm
+    c.drawString(LEFT_MARGIN, cursor_y, "Área:")
+    c.setFont("Helvetica", 10.5)
+    area_text = empleado.area.nombre if empleado and empleado.area else "N/A"
+    c.drawString(LEFT_MARGIN + 2*cm, cursor_y, area_text)
 
-    # Especificaciones del producto
-    c.setFont("Helvetica", 10)
+    c.setFont("Helvetica-Bold", 10.5)
+    c.drawString(WIDTH/2+LEFT_MARGIN-0.8*cm, cursor_y, "Cargo:")
+    c.setFont("Helvetica", 10.5)
+    cargo_text = empleado.cargo.nombre if empleado and empleado.cargo else "N/A"
+    c.drawString(WIDTH/2 + LEFT_MARGIN + 1.0*cm, cursor_y, cargo_text)
+    cursor_y -= 0.55*cm
+
+    c.setFont("Helvetica-Bold", 10.5)
+    c.drawString(LEFT_MARGIN, cursor_y, "Trabajador de:")
+    c.setFont("Helvetica", 10.5)
+    empresa_text = empleado.empresa.nombre if empleado and empleado.empresa else "N/A"
+    c.drawString(LEFT_MARGIN + 2.8*cm, cursor_y, empresa_text)
+    cursor_y -= 1.1*cm
+
+    # Asunto
+    asunto_text = "Entrega de equipo monitor de 24''" if tipo == "asignacion" else "Retiro de equipo monitor de 24''"
+    c.setFont("Helvetica-Bold", 10.5)
+    c.drawString(LEFT_MARGIN, cursor_y, "ASUNTO:")
+    c.setFont("Helvetica", 10.5)
+    c.drawString(LEFT_MARGIN + 2.1*cm, cursor_y, asunto_text)
+    cursor_y -= 1*cm
+
+    # Cuerpo
+    c.setFont("Helvetica", 10.5)
+    entre_prefix = "Por medio de la presente hago constar la entrega de el/los siguiente(s) equipo(s) de cómputo:" \
+        if tipo == 'asignacion' else "Por medio de la presente hago constar el retiro de el/los siguiente(s) equipo(s) de cómputo:"
+    c.drawString(LEFT_MARGIN, cursor_y, entre_prefix)
+    cursor_y -= 0.7*cm
+
+    # Detalle de equipo tipo "bullet", solo campos con valor, indentado
+    producto = inventory_item.producto
+    bullet_x = LEFT_MARGIN + 0.6*cm
+    detail_lines = []
     if producto:
         if producto.marca:
-            c.drawString(LEFT_MARGIN, y, f"Marca: {producto.marca}")
-            y -= 0.45*cm
+            detail_lines.append(f"Marca: {producto.marca}")
         if producto.referencia:
-            c.drawString(LEFT_MARGIN, y, f"Referencia: {producto.referencia}")
-            y -= 0.45*cm
-        if producto.tipo:
-            c.drawString(LEFT_MARGIN, y, f"Tipo de Equipo: {producto.tipo.nombre}")
-            y -= 0.45*cm
+            detail_lines.append(f"Modelo: {producto.referencia}")
+        if producto.tipo and producto.tipo.nombre:
+            detail_lines.append(f"Tipo: {producto.tipo.nombre}")
         if producto.serial:
-            c.drawString(LEFT_MARGIN, y, f"Serial: {producto.serial}")
-            y -= 0.45*cm
+            detail_lines.append(f"Serial: {producto.serial}")
         if producto.memoria_ram:
-            c.drawString(LEFT_MARGIN, y, f"Memoria RAM: {producto.memoria_ram}")
-            y -= 0.45*cm
+            detail_lines.append(f"Memoria RAM: {producto.memoria_ram}")
         if producto.disco_duro:
-            c.drawString(LEFT_MARGIN, y, f"Disco Duro: {producto.disco_duro}")
-            y -= 0.45*cm
+            detail_lines.append(f"Disco duro: {producto.disco_duro}")
         if producto.observaciones:
-            c.drawString(LEFT_MARGIN, y, f"Observaciones: {producto.observaciones}")
-            y -= 0.45*cm
+            detail_lines.append(f"Observaciones: {producto.observaciones}")
 
+    for line in detail_lines:
+        c.drawString(bullet_x, cursor_y, u"\u2022 " + line)
+        cursor_y -= 0.48*cm
+
+    # Observación general
     if inventory_item.observacion:
-        c.drawString(LEFT_MARGIN, y, f"Observación General: {inventory_item.observacion}")
-        y -= 0.45*cm
+        c.drawString(bullet_x, cursor_y, u"\u2022 Observación General: " + str(inventory_item.observacion))
+        cursor_y -= 0.48*cm
 
-    # Espaciado hacia la parte baja para las firmas
-    y_firma_empleado = 4.5*cm
-    y_firma_entrega = 3.2*cm
+    cursor_y -= 0.3*cm
+    # Nota legal/operativa
+    c.setFont("Helvetica", 10)
+    if tipo == "asignacion":
+        nota = (
+            "Cabe recordar que este equipo asignado en acta se encuentra registrado como bien de la empresa, "
+            "usted es responsable por su adecuado uso y conservación. El equipo debe ser devuelto o reemplazado "
+            "por uno de iguales o mejores características en caso de retiro, cambio o por disposición de la empresa. "
+            "El incumplimiento podrá ser causal de descuentos o procesos disciplinarios."
+        )
+    else:
+        nota = (
+            "Con la presente acta se deja constancia del retiro del equipo por parte del trabajador y la "
+            "recepción del mismo por parte de la empresa."
+        )
+    # Solo imprimir la nota si hay suficiente espacio debajo
+    text_width = WIDTH - LEFT_MARGIN - RIGHT_MARGIN
+    lines = []
+    limit = 107
+    for p in nota.split(' '):
+        if lines and len(lines[-1])+len(p)+1 < limit:
+            lines[-1] += ' '+p
+        else:
+            lines.append(p)
+    for line in lines:
+        c.drawString(LEFT_MARGIN, cursor_y, line)
+        cursor_y -= 0.45*cm
+
+    cursor_y -= 0.8*cm
+
+    # Firmas y nombres según ejemplo (lado izquierdo quien entrega, derecho quien recibe)
+    nombre_quien_entrega = str(inventory_item.quien_entrega) if inventory_item.quien_entrega else "____________________________"
+    nombre_recibe = str(empleado.nombre) if empleado and empleado.nombre else "____________________________"
+
+    firma_y = 4.5*cm  # Muy abajo en la hoja, como en el acta física
 
     c.setFont("Helvetica", 10)
-    c.drawString(LEFT_MARGIN, y_firma_empleado, "Firma del Empleado: ___________________________")
-    c.drawString(LEFT_MARGIN, y_firma_entrega, "Firma de Quien Entrega: ________________________")
+    # Líneas de firma
+    c.line(LEFT_MARGIN, firma_y, LEFT_MARGIN+6*cm, firma_y)
+    c.line(WIDTH-RIGHT_MARGIN-6*cm, firma_y, WIDTH-RIGHT_MARGIN, firma_y)
+
+    # Nombres abajo de líneas
+    c.drawString(LEFT_MARGIN, firma_y-0.4*cm, f"ENTREGÓ:\n{nombre_quien_entrega}")
+    c.drawRightString(WIDTH-RIGHT_MARGIN, firma_y-0.4*cm, f"RECIBE:\n{nombre_recibe}")
 
     c.save()
 
@@ -960,7 +997,6 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     with open(plantilla_path, "rb") as plantilla_file:
         plantilla_reader = PdfReader(plantilla_file)
         plantilla_page = plantilla_reader.pages[0]
-
         contenido_reader = PdfReader(data_buffer.name)
         contenido_page = contenido_reader.pages[0]
 
