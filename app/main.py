@@ -835,16 +835,12 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
 
     buffer = io.BytesIO()
 
-    plantilla_path = "plantilla/HOJA_MEMBRETE_MOLINO.pdf"
+    # La ruta debe ser correcta y el nombre idéntico al archivo físico:
+    plantilla_path = "plantilla/HOJA_MEMBRETE_MOLINOS.pdf"  # asegúrate que el nombre coincida 100%
 
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        topMargin=4.5*cm,     # deja espacio para el encabezado de la plantilla
-        bottomMargin=3.5*cm,  # deja espacio para el footer
-        leftMargin=2.5*cm,
-        rightMargin=2.5*cm
-    )
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    from PyPDF2 import PdfReader, PdfWriter
 
     styles = getSampleStyleSheet()
     story = []
@@ -870,154 +866,137 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     else:
         ciudad = "Ciudad"
 
-    story.append(
-        Paragraph(
-            f"{ciudad}, {fecha.strftime('%d de %B de %Y')}",
-            styles["Normal"]
-        )
-    )
+    # Para construir la capa superior (overlay) en un PDF temporal:
+    overlay_buffer = io.BytesIO()
+    overlay = canvas.Canvas(overlay_buffer, pagesize=A4)
+    width, height = A4
 
-    story.append(Spacer(1, 0.6*cm))
+    overlay.setFont("Helvetica", 10)
+    overlay.drawString(55, height - 80, f"{ciudad}, {fecha.strftime('%d de %B de %Y')}")
 
-    # =========================
-    # TÍTULO
-    # =========================
-    story.append(
-        Paragraph(
-            "<b>ACTA DE ENTREGA</b>" if tipo == "asignacion" else "<b>ACTA DE RETIRO</b>",
-            ParagraphStyle(
-                "titulo",
-                parent=styles["Normal"],
-                alignment=1,
-                fontSize=14,
-                spaceAfter=20
-            )
-        )
-    )
+    # Título centrado
+    overlay.setFont("Helvetica-Bold", 13)
+    overlay.drawCentredString(width/2, height - 120, "ACTA DE ENTREGA" if tipo == "asignacion" else "ACTA DE RETIRO")
 
-    story.append(Spacer(1, 0.5*cm))
+    y_cursor = height - 145
+    overlay.setFont("Helvetica", 10)
+    overlay.drawString(55, y_cursor, "Señor(a):")
+    y_cursor -= 15
+    overlay.setFont("Helvetica-Bold", 10)
+    overlay.drawString(55, y_cursor, str(empleado.nombre or ''))
 
-    # =========================
-    # DATOS DEL EMPLEADO
-    # =========================
-    story.append(Paragraph("Señor(a):", styles["Normal"]))
-    story.append(Paragraph(f"<b>{empleado.nombre}</b>", styles["Normal"]))
-
+    y_cursor -= 13
+    overlay.setFont("Helvetica", 10)
     if empleado.cargo:
-        story.append(Paragraph(empleado.cargo.nombre, styles["Normal"]))
-
+        overlay.drawString(55, y_cursor, str(empleado.cargo.nombre))
+        y_cursor -= 13
     if empleado.ciudad:
-        story.append(Paragraph(empleado.ciudad.nombre, styles["Normal"]))
+        overlay.drawString(55, y_cursor, str(empleado.ciudad.nombre))
+        y_cursor -= 13
+    else:
+        y_cursor -= 13
 
-    story.append(Spacer(1, 0.4*cm))
+    # Asunto
+    overlay.drawString(55, y_cursor, "ASUNTO: Entrega de equipo" if tipo == "asignacion" else "ASUNTO: Retiro de equipo")
+    y_cursor -= 18
 
-    # =========================
-    # ASUNTO
-    # =========================
-    asunto = "Entrega de equipo" if tipo == "asignacion" else "Retiro de equipo"
-    story.append(
-        Paragraph(
-            f"<b>ASUNTO:</b> {asunto}",
-            styles["Normal"]
-        )
-    )
-
-    story.append(Spacer(1, 0.4*cm))
-
-    # =========================
-    # TEXTO PRINCIPAL
-    # =========================
+    # Texto principal
+    overlay.setFont("Helvetica", 10)
     texto = (
-        "Por medio de la presente hago constar la entrega de un (1) equipo "
-        "nuevo con las siguientes características:"
+        "Por medio de la presente hago constar la entrega de un (1) equipo nuevo con las siguientes características:"
         if tipo == "asignacion"
-        else
-        "Por medio de la presente hago constar el retiro de un (1) equipo "
-        "con las siguientes características:"
+        else "Por medio de la presente hago constar el retiro de un (1) equipo con las siguientes características:"
     )
+    overlay.drawString(55, y_cursor, texto)
+    y_cursor -= 15
 
-    story.append(Paragraph(texto, styles["Normal"]))
-    story.append(Spacer(1, 0.3*cm))
-
-    # =========================
-    # ESPECIFICACIONES
-    # =========================
+    # Especificaciones
+    spec_x = 70
     if producto:
         if producto.marca:
-            story.append(Paragraph(f"• Marca: {producto.marca}", styles["Normal"]))
+            overlay.drawString(spec_x, y_cursor, f"• Marca: {producto.marca}")
+            y_cursor -= 13
         if producto.referencia:
-            story.append(Paragraph(f"• Modelo: {producto.referencia}", styles["Normal"]))
+            overlay.drawString(spec_x, y_cursor, f"• Modelo: {producto.referencia}")
+            y_cursor -= 13
         if producto.tipo:
-            story.append(Paragraph(f"• Tipo de equipo: {producto.tipo.nombre}", styles["Normal"]))
+            overlay.drawString(spec_x, y_cursor, f"• Tipo de equipo: {producto.tipo.nombre}")
+            y_cursor -= 13
         if producto.serial:
-            story.append(Paragraph(f"• Serial: {producto.serial}", styles["Normal"]))
+            overlay.drawString(spec_x, y_cursor, f"• Serial: {producto.serial}")
+            y_cursor -= 13
         if producto.memoria_ram:
-            story.append(Paragraph(f"• Memoria RAM: {producto.memoria_ram}", styles["Normal"]))
+            overlay.drawString(spec_x, y_cursor, f"• Memoria RAM: {producto.memoria_ram}")
+            y_cursor -= 13
         if producto.disco_duro:
-            story.append(Paragraph(f"• Disco duro: {producto.disco_duro}", styles["Normal"]))
+            overlay.drawString(spec_x, y_cursor, f"• Disco duro: {producto.disco_duro}")
+            y_cursor -= 13
 
-    story.append(Spacer(1, 0.4*cm))
+    y_cursor -= 14
 
-    # =========================
-    # CLÁUSULA
-    # =========================
-    story.append(
-        Paragraph(
-            "Cabe recordar que se le está entregando un activo de la empresa "
-            "para el adecuado uso de sus actividades diarias, quedando bajo su "
-            "responsabilidad el cuidado y mantenimiento del equipo mencionado. "
-            "Cualquier daño ocasionado diferente a defecto de fábrica o desgaste "
-            "por uso de trabajo deberá ser justificado ante la gerencia administrativa.",
-            styles["Normal"]
-        )
+    # Cláusula
+    overlay.setFont("Helvetica", 9.4)
+    clausula = (
+        "Cabe recordar que se le está entregando un activo de la empresa para el adecuado uso de sus "
+        "actividades diarias, quedando bajo su responsabilidad el cuidado y mantenimiento del equipo "
+        "mencionado. Cualquier daño ocasionado diferente a defecto de fábrica o desgaste por uso de trabajo "
+        "deberá ser justificado ante la gerencia administrativa."
     )
+    # Ajustar el texto largo en varias líneas
+    from reportlab.lib.utils import simpleSplit
+    clausula_lines = simpleSplit(clausula, "Helvetica", 9.4, width-110)
+    for line in clausula_lines:
+        overlay.drawString(55, y_cursor, line)
+        y_cursor -= 12
 
-    story.append(Spacer(1, 1.2*cm))
+    y_cursor -= 40
 
-    # =========================
-    # FIRMAS
-    # =========================
-    firmas = Table(
-        [
-            [
-                Paragraph(
-                    "<b>ENTREGA</b><br/><br/>"
-                    "_____________________________<br/>"
-                    f"{inventory_item.quien_entrega or ''}",
-                    styles["Normal"]
-                ),
-                Paragraph(
-                    "<b>RECIBE</b><br/><br/>"
-                    "_____________________________<br/>"
-                    f"{empleado.nombre}<br/>"
-                    f"{empleado.cargo.nombre if empleado.cargo else ''}",
-                    styles["Normal"]
-                ),
-            ]
-        ],
-        colWidths=[7.5*cm, 7.5*cm]
-    )
+    # Firmas (Entrega y Recibe)
+    overlay.setFont("Helvetica-Bold", 10)
+    overlay.drawCentredString(width/4, y_cursor, "ENTREGA")
+    overlay.drawCentredString(width*3/4, y_cursor, "RECIBE")
+    y_cursor -= 22
 
-    story.append(firmas)
+    overlay.setFont("Helvetica", 10)
+    overlay.drawCentredString(width/4, y_cursor, "_____________________________")
+    overlay.drawCentredString(width*3/4, y_cursor, "_____________________________")
+    y_cursor -= 13
 
-    # =========================
-    # FONDO (PLANTILLA PDF)
-    # =========================
-    def draw_background(canvas_obj, doc_obj):
-        if os.path.exists(plantilla_path):
-            reader = PdfReader(plantilla_path)
-            page = reader.pages[0]
-            canvas_obj.saveState()
-            canvas_obj.doForm(
-                canvas_obj.acroForm._doc.Reference(page.indirectRef)
-            )
-            canvas_obj.restoreState()
+    overlay.setFont("Helvetica", 10)
+    overlay.drawCentredString(width/4, y_cursor, f"{inventory_item.quien_entrega or ''}")
+    nombre_recibe = str(empleado.nombre or '')
+    cargo_recibe = str(empleado.cargo.nombre if empleado.cargo else '')
+    overlay.drawCentredString(width*3/4, y_cursor, nombre_recibe)
+    y_cursor -= 13
+    if cargo_recibe:
+        overlay.setFont("Helvetica", 10)
+        overlay.drawCentredString(width*3/4, y_cursor, cargo_recibe)
 
-    doc.build(
-        story,
-        onFirstPage=draw_background,
-        onLaterPages=draw_background
-    )
+    # Finalizar overlay
+    overlay.showPage()
+    overlay.save()
+    overlay_buffer.seek(0)
+
+    # Combinar la plantilla y el overlay
+    if os.path.exists(plantilla_path):
+        try:
+            plantilla = PdfReader(plantilla_path)
+            overlay_pdf = PdfReader(overlay_buffer)
+            output = PdfWriter()
+
+            base = plantilla.pages[0]
+            overlay_page = overlay_pdf.pages[0]
+
+            # Superponer
+            base.merge_page(overlay_page)
+            output.add_page(base)
+
+            output.write(buffer)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al agregar la plantilla: {str(e)}")
+    else:
+        # Si la plantilla no existe, solo devolver el contenido hecho por reportlab
+        buffer = overlay_buffer
 
     buffer.seek(0)
     return buffer
