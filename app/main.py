@@ -929,6 +929,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
         Paragraph(
             f"Por medio de la presente hago constar la {("entrega" if tipo == "asignacion" else "retiro")} de un (1) equipo con las siguientes características:",
             styles["Normal"],
+            alignment=4,
         )
     )
 
@@ -942,11 +943,13 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
         if producto.referencia:
             story.append(Paragraph(f"• Modelo: {producto.referencia}", styles["Normal"]))
         if producto.memoria_ram:
-            story.append(Paragraph(f"• RAM: {producto.memoria_ram}", styles["Normal"]))
+            story.append(Paragraph(f"• Ram: {producto.memoria_ram}", styles["Normal"]))
         if producto.disco_duro:
             story.append(Paragraph(f"• Almacenamiento: {producto.disco_duro}", styles["Normal"]))
         if producto.serial:
             story.append(Paragraph(f"• Serial: {producto.serial}", styles["Normal"]))
+        if producto.observaciones:
+            story.append(Paragraph(f"• Observaciones: {producto.observaciones}", styles["Normal"]))
 
     story.append(Spacer(1, 0.4 * cm))
 
@@ -954,6 +957,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
         Paragraph(
             "Cabe recordar que se le está entregando un activo de la empresa para el adecuado uso de sus actividades diarias, quedando bajo su responsabilidad el cuidado y mantenimiento del equipo mencionado, cualquier daño ocasionado diferente a defecto de fabrica o desgaste por uso de trabajo sera justificado por la persona responsable ante la gerencia administrativa.",
             styles["Normal"],
+            alignment=4,
         )
     )
 
@@ -962,7 +966,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     firma_style = ParagraphStyle(
         name="firma_style",
         parent=styles["Normal"],
-        alignment=1,          # centrado
+        alignment=0,          # Izquierda
         spaceAfter=4
     )
 
@@ -973,8 +977,8 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
             [Paragraph("<b>ENTREGA</b>", firma_style)],
             [Spacer(1, 0.6 * cm)],
             [Paragraph(linea_firma, firma_style)],
-            [Paragraph(inventory_item.quien_entrega or "", firma_style)],
-            [Paragraph("", firma_style)],
+            [Paragraph(f"Nombre: {inventory_item.quien_entrega}" or "", firma_style)],
+            [Paragraph(" ", firma_style)],
         ],
         colWidths=[7.5 * cm],
     )
@@ -984,8 +988,8 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
             [Paragraph("<b>RECIBE</b>", firma_style)],
             [Spacer(1, 0.6 * cm)],
             [Paragraph(linea_firma, firma_style)],
-            [Paragraph(empleado.nombre, firma_style)],
-            [Paragraph(empleado.cargo.nombre if empleado.cargo else "", firma_style)],
+            [Paragraph(f"Nombre: {empleado.nombre}", firma_style)],
+            [Paragraph(f"Cargo: {empleado.cargo.nombre if empleado.cargo else ""}", firma_style)],
         ],
         colWidths=[7.5 * cm],
     )
