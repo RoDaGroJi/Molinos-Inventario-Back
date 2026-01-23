@@ -42,8 +42,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"], # Permite GET, POST, PUT, DELETE, etc.
-    allow_headers=["*"], # Permite todos los headers (incluyendo Authorization)
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -89,7 +89,128 @@ def create_admin():
         db.commit()
     db.close()
 
-# ... [Same as before until the PDF code below] ...
+# --- ENDPOINTS DE PRODUCTOS ---
+@app.get("/productos/", response_model=List[schemas.Producto])
+def listar_productos(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    productos = db.query(models.Producto).offset(skip).limit(limit).all()
+    return productos
+
+@app.get("/productos/{producto_id}", response_model=schemas.Producto)
+def obtener_producto(producto_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    return producto
+
+@app.post("/productos/", response_model=schemas.Producto)
+def crear_producto(producto: schemas.ProductoCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
+    db_producto = models.Producto(**producto.dict())
+    db.add(db_producto)
+    db.commit()
+    db.refresh(db_producto)
+    return db_producto
+
+@app.put("/productos/{producto_id}", response_model=schemas.Producto)
+def actualizar_producto(producto_id: int, producto: schemas.ProductoCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
+    db_producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
+    if not db_producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    for k, v in producto.dict().items():
+        setattr(db_producto, k, v)
+    db.commit()
+    db.refresh(db_producto)
+    return db_producto
+
+@app.delete("/productos/{producto_id}")
+def eliminar_producto(producto_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
+    db_producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
+    if not db_producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    db.delete(db_producto)
+    db.commit()
+    return {"msg": "Producto eliminado correctamente"}
+
+# --- ENDPOINTS DE EMPLEADOS ---
+@app.get("/empleados/", response_model=List[schemas.Empleado])
+def listar_empleados(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    empleados = db.query(models.Empleado).offset(skip).limit(limit).all()
+    return empleados
+
+@app.get("/empleados/{empleado_id}", response_model=schemas.Empleado)
+def obtener_empleado(empleado_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    empleado = db.query(models.Empleado).filter(models.Empleado.id == empleado_id).first()
+    if not empleado:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    return empleado
+
+@app.post("/empleados/", response_model=schemas.Empleado)
+def crear_empleado(empleado: schemas.EmpleadoCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
+    db_empleado = models.Empleado(**empleado.dict())
+    db.add(db_empleado)
+    db.commit()
+    db.refresh(db_empleado)
+    return db_empleado
+
+@app.put("/empleados/{empleado_id}", response_model=schemas.Empleado)
+def actualizar_empleado(empleado_id: int, empleado: schemas.EmpleadoCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
+    db_empleado = db.query(models.Empleado).filter(models.Empleado.id == empleado_id).first()
+    if not db_empleado:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    for k, v in empleado.dict().items():
+        setattr(db_empleado, k, v)
+    db.commit()
+    db.refresh(db_empleado)
+    return db_empleado
+
+@app.delete("/empleados/{empleado_id}")
+def eliminar_empleado(empleado_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
+    db_empleado = db.query(models.Empleado).filter(models.Empleado.id == empleado_id).first()
+    if not db_empleado:
+        raise HTTPException(status_code=404, detail="Empleado no encontrado")
+    db.delete(db_empleado)
+    db.commit()
+    return {"msg": "Empleado eliminado correctamente"}
+
+# --- ENDPOINTS DE INVENTARIO ---
+@app.get("/inventory/", response_model=List[schemas.Inventory])
+def listar_inventario(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    items = db.query(models.Inventory).offset(skip).limit(limit).all()
+    return items
+
+@app.get("/inventory/{item_id}", response_model=schemas.Inventory)
+def obtener_inventario(item_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    item = db.query(models.Inventory).filter(models.Inventory.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Registro de inventario no encontrado")
+    return item
+
+@app.post("/inventory/", response_model=schemas.Inventory)
+def crear_inventario(inventory: schemas.InventoryCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
+    db_item = models.Inventory(**inventory.dict())
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+@app.put("/inventory/{item_id}", response_model=schemas.Inventory)
+def actualizar_inventario(item_id: int, inventory: schemas.InventoryCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
+    db_item = db.query(models.Inventory).filter(models.Inventory.id == item_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Registro de inventario no encontrado")
+    for k, v in inventory.dict().items():
+        setattr(db_item, k, v)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+
+@app.delete("/inventory/{item_id}")
+def eliminar_inventario(item_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
+    db_item = db.query(models.Inventory).filter(models.Inventory.id == item_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Registro de inventario no encontrado")
+    db.delete(db_item)
+    db.commit()
+    return {"msg": "Registro de inventario eliminado correctamente"}
 
 
 def generate_pdf_content_with_hoja_membrete(inventory_item, tipo='asignacion'):
@@ -104,7 +225,6 @@ def generate_pdf_content_with_hoja_membrete(inventory_item, tipo='asignacion'):
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-    # Path absolto a la plantilla
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     plantilla_path = os.path.join(BASE_DIR, "plantilla", "HOJA_MEMBRETE_MOLINOS.pdf")
     if not os.path.exists(plantilla_path):
@@ -112,16 +232,16 @@ def generate_pdf_content_with_hoja_membrete(inventory_item, tipo='asignacion'):
 
     from PyPDF2 import PdfReader, PdfWriter
 
-    # Creamos nuestro contenido en un pdf temporal, luego lo sobrepondremos
     buffer = io.BytesIO()
 
-    # Margen igual al de la plantilla (generalmente 2cm), tamaño carta
-    doc = SimpleDocTemplate(buffer,
-                            pagesize=A4,
-                            topMargin=2*cm,
-                            bottomMargin=2*cm,
-                            leftMargin=2*cm,
-                            rightMargin=2*cm)
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        topMargin=2*cm,
+        bottomMargin=2*cm,
+        leftMargin=2*cm,
+        rightMargin=2*cm
+    )
     story = []
     styles = getSampleStyleSheet()
 
@@ -132,14 +252,13 @@ def generate_pdf_content_with_hoja_membrete(inventory_item, tipo='asignacion'):
         fontSize=16,
         textColor=colors.HexColor('#1e40af'),
         spaceAfter=30,
-        alignment=1  # Center
+        alignment=1  # Centrado
     )
-    # Título
     title_text = "ACTA DE ASIGNACIÓN DE EQUIPO"
     story.append(Paragraph(title_text, title_style))
     story.append(Spacer(1, 0.5*cm))
 
-    # Información del empleado
+    # Datos Generales
     empleado = inventory_item.empleado
     producto = inventory_item.producto
     sede = None
@@ -148,7 +267,6 @@ def generate_pdf_content_with_hoja_membrete(inventory_item, tipo='asignacion'):
     elif empleado and hasattr(empleado, 'ciudad') and empleado.ciudad:
         sede = empleado.ciudad
 
-    # Datos en formato tabla
     data = [
         ['<b>FECHA:</b>', inventory_item.fecha_asignacion.strftime('%d/%m/%Y %H:%M') if inventory_item.fecha_asignacion else datetime.now().strftime('%d/%m/%Y %H:%M')],
     ]
@@ -217,7 +335,7 @@ def generate_pdf_content_with_hoja_membrete(inventory_item, tipo='asignacion'):
         story.append(product_table)
 
     story.append(Spacer(1, 1*cm))
-    # Firma
+    # Firmas
     signature_text = "Firma del Empleado: _________________________"
     story.append(Paragraph(signature_text, styles['Normal']))
     story.append(Spacer(1, 0.5*cm))
@@ -226,26 +344,22 @@ def generate_pdf_content_with_hoja_membrete(inventory_item, tipo='asignacion'):
     doc.build(story)
     buffer.seek(0)
 
-    # Ahora superponemos el contenido sobre el membrete
+    # Superponer contenido sobre el membrete
     temp_pdf_buf = buffer.getvalue()
     packet = io.BytesIO(temp_pdf_buf)
 
-    # Leer la plantilla, y luego escribir encima usando PyPDF2
     plantilla_reader = PdfReader(plantilla_path)
     plantilla_page = plantilla_reader.pages[0]
 
-    # Leer el PDF generado (contenido de esta asignación)
-    from PyPDF2 import PdfReader as PDFReader2, PdfWriter as PDFWriter2, PageObject
+    from PyPDF2 import PdfReader as PDFReader2, PdfWriter as PDFWriter2
 
     overlay_reader = PDFReader2(packet)
     overlay_page = overlay_reader.pages[0]
 
-    # Fusionar overlay_page sobre plantilla_page
     plantilla_page.merge_page(overlay_page)
     output_writer = PDFWriter2()
     output_writer.add_page(plantilla_page)
 
-    # Hacemos la exportación a bytes
     result_buffer = io.BytesIO()
     output_writer.write(result_buffer)
     result_buffer.seek(0)
