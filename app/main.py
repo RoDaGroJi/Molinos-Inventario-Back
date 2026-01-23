@@ -993,6 +993,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     firmas = Table(
         [[entrega, recibe]],
         colWidths=[7.5 * cm, 7.5 * cm],
+        rowHeights=[4.2 * cm],
     )
 
     story.append(firmas)
