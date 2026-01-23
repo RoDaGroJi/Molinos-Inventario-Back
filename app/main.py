@@ -873,7 +873,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
         ciudad = empleado.ciudad.nombre
     else:
         ciudad = "Ciudad"
-        
+
     # ESPACIO EXTRA PARA NO CRUZAR CABECERA
     story.append(Spacer(1, 1.5 * cm))
 
@@ -952,6 +952,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
                 Paragraph(
                     "<b>ENTREGA</b><br/><br/>_____________________________<br/>"
                     f"{inventory_item.quien_entrega or ''}",
+                    f"{''}",
                     styles["Normal"],
                 ),
                 Paragraph(
