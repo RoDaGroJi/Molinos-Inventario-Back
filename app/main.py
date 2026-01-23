@@ -875,7 +875,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
         ciudad = "Ciudad"
 
     # ESPACIO EXTRA PARA NO CRUZAR CABECERA
-    story.append(Spacer(1, 1.5 * cm))
+    story.append(Spacer(1, 2 * cm))
 
     story.append(
         Paragraph(f"{ciudad}, {fecha.strftime('%d de %B de %Y')}", styles["Normal"])
