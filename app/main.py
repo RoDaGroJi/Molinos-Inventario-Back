@@ -952,7 +952,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
                 Paragraph(
                     "<b>ENTREGA</b><br/><br/>_____________________________<br/>"
                     f"{inventory_item.quien_entrega or ''}",
-                    f"{''}",
+                    [" "],
                     styles["Normal"],
                 ),
                 Paragraph(
