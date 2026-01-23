@@ -835,11 +835,13 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
 
     buffer = io.BytesIO()
 
+    plantilla_path = "app/plantilla/HOJA_MEMBRETE_MOLINO.pdf"
+
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        topMargin=2*cm,
-        bottomMargin=2*cm,
+        topMargin=4.5*cm,     # deja espacio para el encabezado de la plantilla
+        bottomMargin=3.5*cm,  # deja espacio para el footer
         leftMargin=2.5*cm,
         rightMargin=2.5*cm
     )
@@ -861,7 +863,6 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
         else datetime.now()
     )
 
-    ciudad = None
     if hasattr(inventory_item, 'sede') and inventory_item.sede:
         ciudad = inventory_item.sede.nombre
     elif empleado and hasattr(empleado, 'ciudad') and empleado.ciudad:
@@ -885,7 +886,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
         Paragraph(
             "<b>ACTA DE ENTREGA</b>" if tipo == "asignacion" else "<b>ACTA DE RETIRO</b>",
             ParagraphStyle(
-                "title",
+                "titulo",
                 parent=styles["Normal"],
                 alignment=1,
                 fontSize=14,
@@ -926,7 +927,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     # =========================
     # TEXTO PRINCIPAL
     # =========================
-    texto_principal = (
+    texto = (
         "Por medio de la presente hago constar la entrega de un (1) equipo "
         "nuevo con las siguientes características:"
         if tipo == "asignacion"
@@ -935,11 +936,11 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
         "con las siguientes características:"
     )
 
-    story.append(Paragraph(texto_principal, styles["Normal"]))
+    story.append(Paragraph(texto, styles["Normal"]))
     story.append(Spacer(1, 0.3*cm))
 
     # =========================
-    # ESPECIFICACIONES (VIÑETAS)
+    # ESPECIFICACIONES
     # =========================
     if producto:
         if producto.marca:
@@ -958,16 +959,15 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     story.append(Spacer(1, 0.4*cm))
 
     # =========================
-    # CLÁUSULA DE RESPONSABILIDAD
+    # CLÁUSULA
     # =========================
     story.append(
         Paragraph(
             "Cabe recordar que se le está entregando un activo de la empresa "
             "para el adecuado uso de sus actividades diarias, quedando bajo su "
             "responsabilidad el cuidado y mantenimiento del equipo mencionado. "
-            "Cualquier daño ocasionado diferente a defecto de fábrica o "
-            "desgaste por uso de trabajo deberá ser justificado ante la "
-            "gerencia administrativa.",
+            "Cualquier daño ocasionado diferente a defecto de fábrica o desgaste "
+            "por uso de trabajo deberá ser justificado ante la gerencia administrativa.",
             styles["Normal"]
         )
     )
@@ -990,7 +990,6 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
                     "<b>RECIBE</b><br/><br/>"
                     "_____________________________<br/>"
                     f"{empleado.nombre}<br/>"
-                    f"CC: {empleado.documento if hasattr(empleado, 'documento') else ''}<br/>"
                     f"{empleado.cargo.nombre if empleado.cargo else ''}",
                     styles["Normal"]
                 ),
@@ -1001,7 +1000,25 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
 
     story.append(firmas)
 
-    doc.build(story)
+    # =========================
+    # FONDO (PLANTILLA PDF)
+    # =========================
+    def draw_background(canvas_obj, doc_obj):
+        if os.path.exists(plantilla_path):
+            reader = PdfReader(plantilla_path)
+            page = reader.pages[0]
+            canvas_obj.saveState()
+            canvas_obj.doForm(
+                canvas_obj.acroForm._doc.Reference(page.indirectRef)
+            )
+            canvas_obj.restoreState()
+
+    doc.build(
+        story,
+        onFirstPage=draw_background,
+        onLaterPages=draw_background
+    )
+
     buffer.seek(0)
     return buffer
 
