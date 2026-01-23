@@ -973,7 +973,6 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     entrega = Table(
         [
             [Paragraph("<b>ENTREGA</b>", firma_style)],
-            [Spacer(1, 0.6 * cm)],
             [Paragraph(linea_firma, firma_style)],
             [Paragraph(f"Nombre: {inventory_item.quien_entrega}" or "", firma_style)],
             [Paragraph(" ", firma_style)],
@@ -984,7 +983,6 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     recibe = Table(
         [
             [Paragraph("<b>RECIBE</b>", firma_style)],
-            [Spacer(1, 0.6 * cm)],
             [Paragraph(linea_firma, firma_style)],
             [Paragraph(f"Nombre: {empleado.nombre}", firma_style)],
             [Paragraph(f"Cargo: {empleado.cargo.nombre if empleado.cargo else ""}", firma_style)],
