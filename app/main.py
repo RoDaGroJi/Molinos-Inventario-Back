@@ -823,198 +823,188 @@ async def bulk_upload_inventory(file: UploadFile = File(...), db: Session = Depe
 
     return {
         "message": f"Carga exitosa: {empleados_creados} empleados, {productos_creados} productos, {registros_creados} registros de inventario creados."
+    }
 
+# --- ENDPOINTS PDF ---
 def generate_pdf_content(inventory_item, tipo='asignacion'):
-    """
-    Genera contenido PDF para asignación o retiro de equipo utilizando la plantilla corporativa,
-    con formato alineado según muestra el acta física (ver imagen y detalle de prompt).
-    """
     if not REPORTLAB_AVAILABLE:
-        raise HTTPException(status_code=500, detail="ReportLab no está instalado. Instale con: pip install reportlab")
+        raise HTTPException(
+            status_code=500,
+            detail="ReportLab no está instalado. Instale con: pip install reportlab"
+        )
 
-    import tempfile
-    from datetime import datetime
-    from PyPDF2 import PdfWriter, PdfReader
-    from reportlab.lib.pagesizes import A4
-    from reportlab.pdfgen import canvas
-    import os
+    buffer = io.BytesIO()
 
-    # Ruta de la plantilla
-    plantilla_path = os.path.join(os.path.dirname(__file__), "plantilla", "HOJA_MEMBRETE_MOLINOS.pdf")
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        topMargin=2*cm,
+        bottomMargin=2*cm,
+        leftMargin=2.5*cm,
+        rightMargin=2.5*cm
+    )
 
-    # Crear PDF temporal con el contenido dinámico
-    data_buffer = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    c = canvas.Canvas(data_buffer.name, pagesize=A4)
+    styles = getSampleStyleSheet()
+    story = []
 
-    # Márgenes y posiciones alineados según el ejemplo físico escaneado
-    LEFT_MARGIN = 2.2 * cm
-    RIGHT_MARGIN = 2.2 * cm
-    WIDTH, HEIGHT = A4
-
-    # La información empieza más abajo (debajo del header fijo)
-    cursor_y = HEIGHT - 6.8*cm  # Ajustado para quedar debajo del encabezado de la plantilla
-
-    # Ciudad y fecha (alineado derecha, "Barranquilla, 21 de Enero de 202X")
     empleado = inventory_item.empleado
-    sede = inventory_item.sede if hasattr(inventory_item, 'sede') and inventory_item.sede else (empleado.ciudad if empleado and hasattr(empleado, 'ciudad') else None)
-    ciudad_nombre = sede.nombre if sede else "Barranquilla"
-    fecha_asignacion = inventory_item.fecha_asignacion if (tipo == 'asignacion' and inventory_item.fecha_asignacion) else (
-        inventory_item.fecha_retiro if inventory_item.fecha_retiro else datetime.now())
-    # Fecha formato: 21 de Enero de 202X
-    meses_es = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
-    fecha_q = fecha_asignacion
-    fecha_texto = f"{ciudad_nombre}, {fecha_q.day} de {meses_es[fecha_q.month-1].capitalize()} de {fecha_q.year}"
-    c.setFont("Helvetica", 11)
-    c.drawRightString(WIDTH - RIGHT_MARGIN, cursor_y, fecha_texto)
-    cursor_y -= 1.4*cm
-
-    # ACTA DE ENTREGA / RETIRO (centrado)
-    title_text = "ACTA DE ENTREGA" if tipo == 'asignacion' else "ACTA DE RETIRO"
-    c.setFont("Helvetica-Bold", 14)
-    c.drawCentredString(WIDTH/2, cursor_y, title_text)
-    cursor_y -= 1.3*cm
-
-    # Datos del destinatario destinatario
-    c.setFont("Helvetica-Bold", 10.5)
-    c.drawString(LEFT_MARGIN, cursor_y, "Señor(a):")
-    c.setFont("Helvetica", 10.5)
-    c.drawString(LEFT_MARGIN + 2*cm, cursor_y, str(empleado.nombre) if empleado and empleado.nombre else "N/A")
-    cursor_y -= 0.55*cm
-
-    c.setFont("Helvetica-Bold", 10.5)
-    c.drawString(LEFT_MARGIN, cursor_y, "Área:")
-    c.setFont("Helvetica", 10.5)
-    area_text = empleado.area.nombre if empleado and empleado.area else "N/A"
-    c.drawString(LEFT_MARGIN + 2*cm, cursor_y, area_text)
-
-    c.setFont("Helvetica-Bold", 10.5)
-    c.drawString(WIDTH/2+LEFT_MARGIN-0.8*cm, cursor_y, "Cargo:")
-    c.setFont("Helvetica", 10.5)
-    cargo_text = empleado.cargo.nombre if empleado and empleado.cargo else "N/A"
-    c.drawString(WIDTH/2 + LEFT_MARGIN + 1.0*cm, cursor_y, cargo_text)
-    cursor_y -= 0.55*cm
-
-    c.setFont("Helvetica-Bold", 10.5)
-    c.drawString(LEFT_MARGIN, cursor_y, "Trabajador de:")
-    c.setFont("Helvetica", 10.5)
-    empresa_text = empleado.empresa.nombre if empleado and empleado.empresa else "N/A"
-    c.drawString(LEFT_MARGIN + 2.8*cm, cursor_y, empresa_text)
-    cursor_y -= 1.1*cm
-
-    # Asunto
-    asunto_text = "Entrega de equipo monitor de 24''" if tipo == "asignacion" else "Retiro de equipo monitor de 24''"
-    c.setFont("Helvetica-Bold", 10.5)
-    c.drawString(LEFT_MARGIN, cursor_y, "ASUNTO:")
-    c.setFont("Helvetica", 10.5)
-    c.drawString(LEFT_MARGIN + 2.1*cm, cursor_y, asunto_text)
-    cursor_y -= 1*cm
-
-    # Cuerpo
-    c.setFont("Helvetica", 10.5)
-    entre_prefix = "Por medio de la presente hago constar la entrega de el/los siguiente(s) equipo(s) de cómputo:" \
-        if tipo == 'asignacion' else "Por medio de la presente hago constar el retiro de el/los siguiente(s) equipo(s) de cómputo:"
-    c.drawString(LEFT_MARGIN, cursor_y, entre_prefix)
-    cursor_y -= 0.7*cm
-
-    # Detalle de equipo tipo "bullet", solo campos con valor, indentado
     producto = inventory_item.producto
-    bullet_x = LEFT_MARGIN + 0.6*cm
-    detail_lines = []
+
+    # =========================
+    # FECHA Y CIUDAD
+    # =========================
+    fecha = (
+        inventory_item.fecha_asignacion
+        if tipo == 'asignacion' and inventory_item.fecha_asignacion
+        else inventory_item.fecha_retiro
+        if inventory_item.fecha_retiro
+        else datetime.now()
+    )
+
+    ciudad = None
+    if hasattr(inventory_item, 'sede') and inventory_item.sede:
+        ciudad = inventory_item.sede.nombre
+    elif empleado and hasattr(empleado, 'ciudad') and empleado.ciudad:
+        ciudad = empleado.ciudad.nombre
+    else:
+        ciudad = "Ciudad"
+
+    story.append(
+        Paragraph(
+            f"{ciudad}, {fecha.strftime('%d de %B de %Y')}",
+            styles["Normal"]
+        )
+    )
+
+    story.append(Spacer(1, 0.6*cm))
+
+    # =========================
+    # TÍTULO
+    # =========================
+    story.append(
+        Paragraph(
+            "<b>ACTA DE ENTREGA</b>" if tipo == "asignacion" else "<b>ACTA DE RETIRO</b>",
+            ParagraphStyle(
+                "title",
+                parent=styles["Normal"],
+                alignment=1,
+                fontSize=14,
+                spaceAfter=20
+            )
+        )
+    )
+
+    story.append(Spacer(1, 0.5*cm))
+
+    # =========================
+    # DATOS DEL EMPLEADO
+    # =========================
+    story.append(Paragraph("Señor(a):", styles["Normal"]))
+    story.append(Paragraph(f"<b>{empleado.nombre}</b>", styles["Normal"]))
+
+    if empleado.cargo:
+        story.append(Paragraph(empleado.cargo.nombre, styles["Normal"]))
+
+    if empleado.ciudad:
+        story.append(Paragraph(empleado.ciudad.nombre, styles["Normal"]))
+
+    story.append(Spacer(1, 0.4*cm))
+
+    # =========================
+    # ASUNTO
+    # =========================
+    asunto = "Entrega de equipo" if tipo == "asignacion" else "Retiro de equipo"
+    story.append(
+        Paragraph(
+            f"<b>ASUNTO:</b> {asunto}",
+            styles["Normal"]
+        )
+    )
+
+    story.append(Spacer(1, 0.4*cm))
+
+    # =========================
+    # TEXTO PRINCIPAL
+    # =========================
+    texto_principal = (
+        "Por medio de la presente hago constar la entrega de un (1) equipo "
+        "nuevo con las siguientes características:"
+        if tipo == "asignacion"
+        else
+        "Por medio de la presente hago constar el retiro de un (1) equipo "
+        "con las siguientes características:"
+    )
+
+    story.append(Paragraph(texto_principal, styles["Normal"]))
+    story.append(Spacer(1, 0.3*cm))
+
+    # =========================
+    # ESPECIFICACIONES (VIÑETAS)
+    # =========================
     if producto:
         if producto.marca:
-            detail_lines.append(f"Marca: {producto.marca}")
+            story.append(Paragraph(f"• Marca: {producto.marca}", styles["Normal"]))
         if producto.referencia:
-            detail_lines.append(f"Modelo: {producto.referencia}")
-        if producto.tipo and producto.tipo.nombre:
-            detail_lines.append(f"Tipo: {producto.tipo.nombre}")
+            story.append(Paragraph(f"• Modelo: {producto.referencia}", styles["Normal"]))
+        if producto.tipo:
+            story.append(Paragraph(f"• Tipo de equipo: {producto.tipo.nombre}", styles["Normal"]))
         if producto.serial:
-            detail_lines.append(f"Serial: {producto.serial}")
+            story.append(Paragraph(f"• Serial: {producto.serial}", styles["Normal"]))
         if producto.memoria_ram:
-            detail_lines.append(f"Memoria RAM: {producto.memoria_ram}")
+            story.append(Paragraph(f"• Memoria RAM: {producto.memoria_ram}", styles["Normal"]))
         if producto.disco_duro:
-            detail_lines.append(f"Disco duro: {producto.disco_duro}")
-        if producto.observaciones:
-            detail_lines.append(f"Observaciones: {producto.observaciones}")
+            story.append(Paragraph(f"• Disco duro: {producto.disco_duro}", styles["Normal"]))
 
-    for line in detail_lines:
-        c.drawString(bullet_x, cursor_y, u"\u2022 " + line)
-        cursor_y -= 0.48*cm
+    story.append(Spacer(1, 0.4*cm))
 
-    # Observación general
-    if inventory_item.observacion:
-        c.drawString(bullet_x, cursor_y, u"\u2022 Observación General: " + str(inventory_item.observacion))
-        cursor_y -= 0.48*cm
-
-    cursor_y -= 0.3*cm
-    # Nota legal/operativa
-    c.setFont("Helvetica", 10)
-    if tipo == "asignacion":
-        nota = (
-            "Cabe recordar que este equipo asignado en acta se encuentra registrado como bien de la empresa, "
-            "usted es responsable por su adecuado uso y conservación. El equipo debe ser devuelto o reemplazado "
-            "por uno de iguales o mejores características en caso de retiro, cambio o por disposición de la empresa. "
-            "El incumplimiento podrá ser causal de descuentos o procesos disciplinarios."
+    # =========================
+    # CLÁUSULA DE RESPONSABILIDAD
+    # =========================
+    story.append(
+        Paragraph(
+            "Cabe recordar que se le está entregando un activo de la empresa "
+            "para el adecuado uso de sus actividades diarias, quedando bajo su "
+            "responsabilidad el cuidado y mantenimiento del equipo mencionado. "
+            "Cualquier daño ocasionado diferente a defecto de fábrica o "
+            "desgaste por uso de trabajo deberá ser justificado ante la "
+            "gerencia administrativa.",
+            styles["Normal"]
         )
-    else:
-        nota = (
-            "Con la presente acta se deja constancia del retiro del equipo por parte del trabajador y la "
-            "recepción del mismo por parte de la empresa."
-        )
-    # Solo imprimir la nota si hay suficiente espacio debajo
-    text_width = WIDTH - LEFT_MARGIN - RIGHT_MARGIN
-    lines = []
-    limit = 107
-    for p in nota.split(' '):
-        if lines and len(lines[-1])+len(p)+1 < limit:
-            lines[-1] += ' '+p
-        else:
-            lines.append(p)
-    for line in lines:
-        c.drawString(LEFT_MARGIN, cursor_y, line)
-        cursor_y -= 0.45*cm
+    )
 
-    cursor_y -= 0.8*cm
+    story.append(Spacer(1, 1.2*cm))
 
-    # Firmas y nombres según ejemplo (lado izquierdo quien entrega, derecho quien recibe)
-    nombre_quien_entrega = str(inventory_item.quien_entrega) if inventory_item.quien_entrega else "____________________________"
-    nombre_recibe = str(empleado.nombre) if empleado and empleado.nombre else "____________________________"
+    # =========================
+    # FIRMAS
+    # =========================
+    firmas = Table(
+        [
+            [
+                Paragraph(
+                    "<b>ENTREGA</b><br/><br/>"
+                    "_____________________________<br/>"
+                    f"{inventory_item.quien_entrega or ''}",
+                    styles["Normal"]
+                ),
+                Paragraph(
+                    "<b>RECIBE</b><br/><br/>"
+                    "_____________________________<br/>"
+                    f"{empleado.nombre}<br/>"
+                    f"CC: {empleado.documento if hasattr(empleado, 'documento') else ''}<br/>"
+                    f"{empleado.cargo.nombre if empleado.cargo else ''}",
+                    styles["Normal"]
+                ),
+            ]
+        ],
+        colWidths=[7.5*cm, 7.5*cm]
+    )
 
-    firma_y = 4.5*cm  # Muy abajo en la hoja, como en el acta física
+    story.append(firmas)
 
-    c.setFont("Helvetica", 10)
-    # Líneas de firma
-    c.line(LEFT_MARGIN, firma_y, LEFT_MARGIN+6*cm, firma_y)
-    c.line(WIDTH-RIGHT_MARGIN-6*cm, firma_y, WIDTH-RIGHT_MARGIN, firma_y)
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
-    # Nombres abajo de líneas
-    c.drawString(LEFT_MARGIN, firma_y-0.4*cm, f"ENTREGÓ:\n{nombre_quien_entrega}")
-    c.drawRightString(WIDTH-RIGHT_MARGIN, firma_y-0.4*cm, f"RECIBE:\n{nombre_recibe}")
-
-    c.save()
-
-    # --- Merge plantilla con PDF generado ---
-    output_buffer = io.BytesIO()
-    with open(plantilla_path, "rb") as plantilla_file:
-        plantilla_reader = PdfReader(plantilla_file)
-        plantilla_page = plantilla_reader.pages[0]
-        contenido_reader = PdfReader(data_buffer.name)
-        contenido_page = contenido_reader.pages[0]
-
-        writer = PdfWriter()
-        # Overlay (el contenido "cae encima" de la plantilla)
-        plantilla_page.merge_page(contenido_page)
-        writer.add_page(plantilla_page)
-        writer.write(output_buffer)
-        output_buffer.seek(0)
-
-    # Limpiar archivo temporal
-    data_buffer.close()
-    try:
-        os.unlink(data_buffer.name)
-    except Exception:
-        pass
-
-    return output_buffer
 
 @app.get("/inventory/{item_id}/pdf-asignacion")
 def generar_pdf_asignacion(
@@ -1043,9 +1033,6 @@ def generar_pdf_asignacion(
     
     return StreamingResponse(
         buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
