@@ -346,12 +346,12 @@ def create_item(item: schemas.InventoryCreate, db: Session = Depends(get_db), cu
     return new_item
 
 @app.get("/inventory/", response_model=List[schemas.InventoryOut])
-def get_inventory(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user), skip: int = 0, limit: int = 10):
+def get_inventory(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     query = db.query(models.Inventory)
     if not current_user.is_admin:
         query = query.filter(models.Inventory.is_active == True)
     total = query.count()
-    items = query.offset(skip).limit(limit).all()
+    items = query.all()
     return items
 
 @app.get("/inventory/count")
