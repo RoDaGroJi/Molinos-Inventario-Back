@@ -835,7 +835,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
 
     buffer = io.BytesIO()
 
-    plantilla_path = "app/plantilla/HOJA_MEMBRETE_MOLINO.pdf"
+    plantilla_path = "./plantilla/HOJA_MEMBRETE_MOLINO.pdf"
 
     doc = SimpleDocTemplate(
         buffer,
