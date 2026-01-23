@@ -838,7 +838,20 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     plantilla_path = os.path.join(BASE_DIR, "plantilla", "HOJA_MEMBRETE_MOLINOS.pdf")
-
+    MESES_ES = {
+        1: "enero",
+        2: "febrero",
+        3: "marzo",
+        4: "abril",
+        5: "mayo",
+        6: "junio",
+        7: "julio",
+        8: "agosto",
+        9: "septiembre",
+        10: "octubre",
+        11: "noviembre",
+        12: "diciembre",
+    }
     # =========================
     # 1. PDF DE CONTENIDO
     # =========================
@@ -868,9 +881,9 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     )
 
     if hasattr(inventory_item, "sede") and inventory_item.sede:
-        ciudad = inventory_item.sede.nombre
+        ciudad = inventory_item.sede.nombre.capitalize()
     elif empleado and empleado.ciudad:
-        ciudad = empleado.ciudad.nombre
+        ciudad = empleado.ciudad.nombre.capitalize()
     else:
         ciudad = "Ciudad"
 
@@ -878,7 +891,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     story.append(Spacer(1, 2 * cm))
 
     story.append(
-        Paragraph(f"{ciudad}, {fecha.strftime('%d de %B de %Y')}", styles["Normal"])
+        Paragraph(f"{ciudad}, {fecha.day} de {MESES_ES[fecha.month]} de {fecha.year}", styles["Normal"])
     )
     story.append(Spacer(1, 0.6 * cm))
 
