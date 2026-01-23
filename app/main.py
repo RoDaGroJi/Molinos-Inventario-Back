@@ -823,36 +823,32 @@ async def bulk_upload_inventory(file: UploadFile = File(...), db: Session = Depe
 
     return {
         "message": f"Carga exitosa: {empleados_creados} empleados, {productos_creados} productos, {registros_creados} registros de inventario creados."
-    }
-
-# --- ENDPOINTS PDF ---
-
 
 def generate_pdf_content(inventory_item, tipo='asignacion'):
-    """Genera contenido PDF para asignación o retiro de equipo utilizando plantilla PDF"""
+    """Genera contenido PDF para asignación o retiro de equipo utilizando plantilla PDF, colocando la información más abajo en la página."""
     if not REPORTLAB_AVAILABLE:
         raise HTTPException(status_code=500, detail="ReportLab no está instalado. Instale con: pip install reportlab")
 
     plantilla_path = os.path.join(os.path.dirname(__file__), "plantilla", "HOJA_MEMBRETE_MOLINOS.pdf")
 
-    # --- Crear PDF temporal con el contenido dinámico ---
+    # --- Crear PDF temporal para el contenido dinámico ---
     data_buffer = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     c = canvas.Canvas(data_buffer.name, pagesize=A4)
 
-    # Márgenes para no superponerse con diseño de plantilla
-    TOP_MARGIN = 3.2 * cm
-    LEFT_MARGIN = 2.2 * cm
+    # --- Definimos el margen superior más bajo para colocar la información más abajo ---
+    # Puedes ajustar MARGIN_TOP según el diseño de la plantilla PDF (por ejemplo, rebajado unos 6-7cm)
+    MARGIN_TOP = 7.7 * cm  # Más bajo para que todo baje
+    LEFT_MARGIN = 2.1 * cm  # Leve ajuste lateral
 
-    # Título
+    # Título (más abajo)
     title_text = "ACTA DE ASIGNACIÓN DE EQUIPO" if tipo == 'asignacion' else "ACTA DE RETIRO DE EQUIPO"
     c.setFont("Helvetica-Bold", 16)
     c.setFillColor('#1e40af')
-    c.drawCentredString(A4[0] / 2, A4[1] - TOP_MARGIN, title_text)
+    c.drawCentredString(A4[0] / 2, A4[1] - MARGIN_TOP, title_text)
     c.setFillColor('black')
+    y = A4[1] - MARGIN_TOP - 1.3 * cm
 
-    y = A4[1] - TOP_MARGIN - 1.7*cm
-
-    # Información del empleado y equipo en líneas "tipo formulario"
+    # Información del empleado y equipo en líneas tipo "formulario"
     empleado = inventory_item.empleado
     producto = inventory_item.producto
 
@@ -868,94 +864,93 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     c.setFont("Helvetica-Bold", 10)
     c.drawString(LEFT_MARGIN, y, "FECHA:")
     c.setFont("Helvetica", 10)
-    c.drawString(LEFT_MARGIN + 2.8*cm, y, fecha_valor)
-    y -= 0.75*cm
+    c.drawString(LEFT_MARGIN + 2.7*cm, y, fecha_valor)
+    y -= 0.7*cm
 
     if empleado:
         c.setFont("Helvetica-Bold", 10)
         c.drawString(LEFT_MARGIN, y, "EMPLEADO:")
         c.setFont("Helvetica", 10)
-        c.drawString(LEFT_MARGIN + 2.8*cm, y, str(empleado.nombre or 'N/A'))
-        y -= 0.65*cm
+        c.drawString(LEFT_MARGIN + 2.7*cm, y, str(empleado.nombre or 'N/A'))
+        y -= 0.6*cm
 
         if empleado.cargo:
             c.setFont("Helvetica-Bold", 10)
             c.drawString(LEFT_MARGIN, y, "CARGO:")
             c.setFont("Helvetica", 10)
-            c.drawString(LEFT_MARGIN + 2.8*cm, y, str(empleado.cargo.nombre))
-            y -= 0.65*cm
+            c.drawString(LEFT_MARGIN + 2.7*cm, y, str(empleado.cargo.nombre))
+            y -= 0.6*cm
 
         if empleado.area:
             c.setFont("Helvetica-Bold", 10)
             c.drawString(LEFT_MARGIN, y, "ÁREA:")
             c.setFont("Helvetica", 10)
-            c.drawString(LEFT_MARGIN + 2.8*cm, y, str(empleado.area.nombre))
-            y -= 0.65*cm
+            c.drawString(LEFT_MARGIN + 2.7*cm, y, str(empleado.area.nombre))
+            y -= 0.6*cm
 
         if empleado.empresa:
             c.setFont("Helvetica-Bold", 10)
             c.drawString(LEFT_MARGIN, y, "EMPRESA:")
             c.setFont("Helvetica", 10)
-            c.drawString(LEFT_MARGIN + 2.8*cm, y, str(empleado.empresa.nombre))
-            y -= 0.65*cm
+            c.drawString(LEFT_MARGIN + 2.7*cm, y, str(empleado.empresa.nombre))
+            y -= 0.6*cm
 
     if sede:
         c.setFont("Helvetica-Bold", 10)
         c.drawString(LEFT_MARGIN, y, "SEDE:")
         c.setFont("Helvetica", 10)
-        c.drawString(LEFT_MARGIN + 2.8*cm, y, str(sede.nombre))
-        y -= 0.65*cm
+        c.drawString(LEFT_MARGIN + 2.7*cm, y, str(sede.nombre))
+        y -= 0.6*cm
 
     if inventory_item.quien_entrega:
         c.setFont("Helvetica-Bold", 10)
         c.drawString(LEFT_MARGIN, y, "QUIÉN ENTREGA:")
         c.setFont("Helvetica", 10)
-        c.drawString(LEFT_MARGIN + 2.8*cm, y, str(inventory_item.quien_entrega))
-        y -= 0.8*cm
+        c.drawString(LEFT_MARGIN + 2.7*cm, y, str(inventory_item.quien_entrega))
+        y -= 0.7*cm
 
-    # Espacio antes del bloque de especificaciones
-    y -= 0.5*cm
+    # Espacio antes de especificaciones
+    y -= 0.45*cm
 
-    c.setFont("Helvetica-Bold", 11)
+    c.setFont("Helvetica-Bold", 10.5)
     c.drawString(LEFT_MARGIN, y, "ESPECIFICACIONES DEL EQUIPO:")
-    y -= 0.7*cm
+    y -= 0.6*cm
 
     # Especificaciones del producto
     c.setFont("Helvetica", 10)
     if producto:
         if producto.marca:
             c.drawString(LEFT_MARGIN, y, f"Marca: {producto.marca}")
-            y -= 0.5*cm
+            y -= 0.45*cm
         if producto.referencia:
             c.drawString(LEFT_MARGIN, y, f"Referencia: {producto.referencia}")
-            y -= 0.5*cm
+            y -= 0.45*cm
         if producto.tipo:
             c.drawString(LEFT_MARGIN, y, f"Tipo de Equipo: {producto.tipo.nombre}")
-            y -= 0.5*cm
+            y -= 0.45*cm
         if producto.serial:
             c.drawString(LEFT_MARGIN, y, f"Serial: {producto.serial}")
-            y -= 0.5*cm
+            y -= 0.45*cm
         if producto.memoria_ram:
             c.drawString(LEFT_MARGIN, y, f"Memoria RAM: {producto.memoria_ram}")
-            y -= 0.5*cm
+            y -= 0.45*cm
         if producto.disco_duro:
             c.drawString(LEFT_MARGIN, y, f"Disco Duro: {producto.disco_duro}")
-            y -= 0.5*cm
+            y -= 0.45*cm
         if producto.observaciones:
             c.drawString(LEFT_MARGIN, y, f"Observaciones: {producto.observaciones}")
-            y -= 0.5*cm
+            y -= 0.45*cm
 
     if inventory_item.observacion:
         c.drawString(LEFT_MARGIN, y, f"Observación General: {inventory_item.observacion}")
-        y -= 0.5*cm
+        y -= 0.45*cm
 
     # Espaciado hacia la parte baja para las firmas
-    y_firma_empleado = 4.6*cm
-    y_firma_entrega = 3.3*cm
+    y_firma_empleado = 4.5*cm
+    y_firma_entrega = 3.2*cm
 
     c.setFont("Helvetica", 10)
     c.drawString(LEFT_MARGIN, y_firma_empleado, "Firma del Empleado: ___________________________")
-    c.drawString(LEFT_MARGIN+9*cm, y_firma_empleado, "")
     c.drawString(LEFT_MARGIN, y_firma_entrega, "Firma de Quien Entrega: ________________________")
 
     c.save()
@@ -970,7 +965,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
         contenido_page = contenido_reader.pages[0]
 
         writer = PdfWriter()
-        # Overlay
+        # Overlay (el contenido "cae encima" de la plantilla)
         plantilla_page.merge_page(contenido_page)
         writer.add_page(plantilla_page)
         writer.write(output_buffer)
@@ -1012,6 +1007,9 @@ def generar_pdf_asignacion(
     
     return StreamingResponse(
         buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
