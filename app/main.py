@@ -946,23 +946,38 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
 
     story.append(Spacer(1, 1.2 * cm))
 
-    firmas = Table(
+    firma_style = ParagraphStyle(
+        name="firma_style",
+        parent=styles["Normal"],
+        alignment=1,          # centrado
+        spaceAfter=4
+    )
+
+    linea_firma = "_____________________________"
+
+    entrega = Table(
         [
-            [
-                Paragraph(
-                    "<b>ENTREGA</b><br/><br/>_____________________________<br/>"
-                    f"{inventory_item.quien_entrega or ''}",
-                    [" "],
-                    styles["Normal"],
-                ),
-                Paragraph(
-                    "<b>RECIBE</b><br/><br/>_____________________________<br/>"
-                    f"{empleado.nombre}<br/>"
-                    f"{empleado.cargo.nombre if empleado.cargo else ''}",
-                    styles["Normal"],
-                ),
-            ]
+            [Paragraph("<b>ENTREGA</b>", firma_style)],
+            [Spacer(1, 0.6 * cm)],
+            [Paragraph(linea_firma, firma_style)],
+            [Paragraph(inventory_item.quien_entrega or "", firma_style)],
         ],
+        colWidths=[7.5 * cm],
+    )
+
+    recibe = Table(
+        [
+            [Paragraph("<b>RECIBE</b>", firma_style)],
+            [Spacer(1, 0.6 * cm)],
+            [Paragraph(linea_firma, firma_style)],
+            [Paragraph(empleado.nombre, firma_style)],
+            [Paragraph(empleado.cargo.nombre if empleado.cargo else "", firma_style)],
+        ],
+        colWidths=[7.5 * cm],
+    )
+
+    firmas = Table(
+        [[entrega, recibe]],
         colWidths=[7.5 * cm, 7.5 * cm],
     )
 
