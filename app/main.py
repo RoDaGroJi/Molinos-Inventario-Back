@@ -924,12 +924,16 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     story.append(Spacer(1, 0.3 * cm))
 
     if producto:
+        if producto.tipo:
+            story.append(Paragraph(f"• Tipo de equipo: {producto.tipo.nombre}", styles["Normal"]))
         if producto.marca:
             story.append(Paragraph(f"• Marca: {producto.marca}", styles["Normal"]))
         if producto.referencia:
             story.append(Paragraph(f"• Modelo: {producto.referencia}", styles["Normal"]))
-        if producto.tipo:
-            story.append(Paragraph(f"• Tipo de equipo: {producto.tipo.nombre}", styles["Normal"]))
+        if producto.memoria_ram:
+            story.append(Paragraph(f"• RAM: {producto.memoria_ram}", styles["Normal"]))
+        if producto.disco_duro:
+            story.append(Paragraph(f"• Almacenamiento: {producto.disco_duro}", styles["Normal"]))
         if producto.serial:
             story.append(Paragraph(f"• Serial: {producto.serial}", styles["Normal"]))
 
@@ -961,6 +965,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
             [Spacer(1, 0.6 * cm)],
             [Paragraph(linea_firma, firma_style)],
             [Paragraph(inventory_item.quien_entrega or "", firma_style)],
+            [Paragraph("", firma_style)],
         ],
         colWidths=[7.5 * cm],
     )
