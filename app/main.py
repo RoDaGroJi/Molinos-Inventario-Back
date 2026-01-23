@@ -927,9 +927,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
 
     story.append(
         Paragraph(
-            "Por medio de la presente hago constar la "
-            + ("entrega" if tipo == "asignacion" else "retiro")
-            + " de un (1) equipo con las siguientes características:",
+            f"Por medio de la presente hago constar la {("entrega" if tipo == "asignacion" else "retiro")} de un (1) equipo con las siguientes características:",
             styles["Normal"],
         )
     )
@@ -954,9 +952,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
 
     story.append(
         Paragraph(
-            "Cabe recordar que se le está entregando un activo de la empresa "
-            "para el adecuado uso de sus actividades diarias, quedando bajo su "
-            "responsabilidad el cuidado y mantenimiento del equipo mencionado.",
+            "Cabe recordar que se le está entregando un activo de la empresa para el adecuado uso de sus actividades diarias, quedando bajo su responsabilidad el cuidado y mantenimiento del equipo mencionado, cualquier daño ocasionado diferente a defecto de fabrica o desgaste por uso de trabajo sera justificado por la persona responsable ante la gerencia administrativa.",
             styles["Normal"],
         )
     )
