@@ -976,7 +976,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
             [Paragraph("<b>ENTREGA</b>", firma_style)],
             [""],
             [Paragraph(linea_firma, firma_style)],
-            [Paragraph(f"Nombre: {inventory_item.quien_entrega}" or "", firma_style)],
+            [Paragraph(f"Nombre: {inventory_item.quien_entrega.capitalize()}" or "", firma_style)],
             [Paragraph(" ", firma_style)],
         ],
         colWidths=[7.5 * cm],
@@ -988,8 +988,8 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
             [Paragraph("<b>RECIBE</b>", firma_style)],
             [""],
             [Paragraph(linea_firma, firma_style)],
-            [Paragraph(f"Nombre: {empleado.nombre}", firma_style)],
-            [Paragraph(f"Cargo: {empleado.cargo.nombre if empleado.cargo else ""}", firma_style)],
+            [Paragraph(f"Nombre: {empleado.nombre.capitalize()}", firma_style)],
+            [Paragraph(f"Cargo: {empleado.cargo.nombre.capitalize() if empleado.cargo else ""}", firma_style)],
         ],
         colWidths=[7.5 * cm],
         rowHeights=[0.6*cm, 1.6*cm, 0.6*cm, 0.5*cm, 0.5*cm]
@@ -1002,7 +1002,7 @@ def generate_pdf_content(inventory_item, tipo='asignacion'):
     firmas.setStyle([
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
     ])
-    
+
     story.append(Spacer(1, 1.2 * cm))
     story.append(firmas)
 
