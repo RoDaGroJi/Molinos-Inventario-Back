@@ -669,7 +669,7 @@ async def export_inventory_excel(current_user: models.User = Depends(get_current
         # -------------------------------------------------
         # 4. Convertir rango a Tabla de Excel
         # -------------------------------------------------
-        end_row = ws.max_row
+        """ end_row = ws.max_row
         end_col = ws.max_column
         table_ref = f"A1:{get_column_letter(end_col)}{end_row}"
 
@@ -688,7 +688,7 @@ async def export_inventory_excel(current_user: models.User = Depends(get_current
         )
 
         table.tableStyleInfo = style
-        ws.add_table(table)
+        ws.add_table(table) """
 
     output.seek(0)
 
