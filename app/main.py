@@ -673,8 +673,10 @@ async def export_inventory_excel(current_user: models.User = Depends(get_current
         end_col = ws.max_column
         table_ref = f"A1:{get_column_letter(end_col)}{end_row}"
 
-        table = Table(ref=table_ref)
+        table = Table()
+        table.ref = table_ref
         table.displayName = "InventarioTable"
+
 
 
         style = TableStyleInfo(
