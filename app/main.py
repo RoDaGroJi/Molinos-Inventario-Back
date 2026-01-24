@@ -18,6 +18,9 @@ import io
 import os
 from datetime import datetime
 from PyPDF2 import PdfReader, PdfWriter
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.styles import Font
 try:
     from reportlab.lib.pagesizes import letter, A4
     from reportlab.lib import colors
@@ -610,6 +613,7 @@ async def export_inventory_excel(current_user: models.User = Depends(get_current
         empleado = item.empleado
         producto = item.producto
         sede = item.sede or (empleado.ciudad if empleado else None)
+
         data.append({
             "Fecha Asignación": item.fecha_asignacion.strftime('%d/%m/%Y') if item.fecha_asignacion else "N/A",
             "Fecha Retiro": item.fecha_retiro.strftime('%d/%m/%Y') if item.fecha_retiro else "N/A",
@@ -618,33 +622,78 @@ async def export_inventory_excel(current_user: models.User = Depends(get_current
             "Área": empleado.area.nombre if empleado and empleado.area else "N/A",
             "Empresa": empleado.empresa.nombre if empleado and empleado.empresa else "N/A",
             "Ciudad": empleado.ciudad.nombre if empleado and empleado.ciudad else "N/A",
-            "Sede": sede.nombre if sede else (empleado.ciudad.nombre if empleado and empleado.ciudad else "N/A"),
+            "Sede": sede.nombre if sede else "N/A",
             "Marca": producto.marca if producto and producto.marca else "N/A",
-            "Referencia": producto.referencia if producto and producto.referencia else "",
+            "Referencia": producto.referencia if producto else "",
             "Tipo Equipo": producto.tipo.nombre if producto and producto.tipo else "N/A",
-            "Memoria RAM": producto.memoria_ram if producto and producto.memoria_ram else "",
-            "Disco Duro": producto.disco_duro if producto and producto.disco_duro else "",
-            "Serial": producto.serial if producto and producto.serial else "",
-            "Observaciones Producto": producto.observaciones if producto and producto.observaciones else "",
-            "Quién Entrega": item.quien_entrega if item.quien_entrega else "N/A",
-            "Observación": item.observacion if item.observacion else "",
+            "Memoria RAM": producto.memoria_ram if producto else "",
+            "Disco Duro": producto.disco_duro if producto else "",
+            "Serial": producto.serial if producto else "",
+            "Observaciones Producto": producto.observaciones if producto else "",
+            "Quién Entrega": item.quien_entrega or "N/A",
+            "Observación": item.observacion or "",
             "Estado": "ACTIVO" if item.is_active else "RETIRADO"
         })
 
     df = pd.DataFrame(data)
+
     output = io.BytesIO()
-    
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Inventario')
-        
+
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        sheet_name = "Inventario"
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+
+        ws = writer.sheets[sheet_name]
+
+        # -------------------------------------------------
+        # 1. Congelar encabezado
+        # -------------------------------------------------
+        ws.freeze_panes = "A2"
+
+        # -------------------------------------------------
+        # 2. Auto-ajustar ancho de columnas
+        # -------------------------------------------------
+        for col_idx, col in enumerate(df.columns, start=1):
+            max_length = len(col)
+            for cell in ws[get_column_letter(col_idx)]:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            ws.column_dimensions[get_column_letter(col_idx)].width = max_length + 2
+
+        # -------------------------------------------------
+        # 3. Estilo de encabezados
+        # -------------------------------------------------
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+
+        # -------------------------------------------------
+        # 4. Convertir rango a Tabla de Excel
+        # -------------------------------------------------
+        end_row = ws.max_row
+        end_col = ws.max_column
+        table_ref = f"A1:{get_column_letter(end_col)}{end_row}"
+
+        table = Table(displayName="InventarioTable", ref=table_ref)
+
+        style = TableStyleInfo(
+            name="TableStyleMedium9",
+            showFirstColumn=False,
+            showLastColumn=False,
+            showRowStripes=True,
+            showColumnStripes=False,
+        )
+
+        table.tableStyleInfo = style
+        ws.add_table(table)
+
     output.seek(0)
-    
+
     filename = f"Reporte_Inventario_{datetime.now().strftime('%Y%m%d')}.xlsx"
-    
+
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
 @app.post("/inventory/upload-masivo")
