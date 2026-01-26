@@ -111,7 +111,7 @@ def get_empleados(db: Session = Depends(get_db), current_user: models.User = Dep
         query = query.filter(models.Empleado.is_active == True)
     if search:
         query = query.filter(models.Empleado.nombre.ilike(f"%{search}%"))
-    return query.all()
+    return query.order_by(models.Empleado.id.desc()).all()
 
 @app.get("/empleados/{empleado_id}", response_model=schemas.EmpleadoOut)
 def get_empleado(empleado_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -185,7 +185,7 @@ def get_productos(db: Session = Depends(get_db), current_user: models.User = Dep
                 models.Producto.serial.ilike(f"%{search}%")
             )
         )
-    return query.all()
+    return query.order_by(models.Producto.id.desc()).all()
 
 @app.get("/productos/{producto_id}", response_model=schemas.ProductoOut)
 def get_producto(producto_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -361,7 +361,7 @@ def get_inventory(db: Session = Depends(get_db), current_user: models.User = Dep
     if not current_user.is_admin:
         query = query.filter(models.Inventory.is_active == True)
     total = query.count()
-    items = query.all()
+    items = query.order_by(models.Inventory.id.desc()).all()
     return items
 
 @app.get("/inventory/count")
@@ -383,23 +383,23 @@ def create_area(area: schemas.CatalogBase, db: Session = Depends(get_db), curren
 
 @app.get("/areas/", response_model=List[schemas.CatalogOut])
 def get_areas(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return db.query(models.Area).filter(models.Area.is_active == True).all()
+    return db.query(models.Area).filter(models.Area.is_active == True).order_by(models.Area.id.desc()).all()
 
 @app.get("/empresas/", response_model=List[schemas.CatalogOut])
 def get_empresas(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return db.query(models.Empresa).filter(models.Empresa.is_active == True).all()
+    return db.query(models.Empresa).filter(models.Empresa.is_active == True).order_by(models.Empresa.id.desc()).all()
 
 @app.get("/cargos/", response_model=List[schemas.CatalogOut])
 def get_cargos(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return db.query(models.Cargo).filter(models.Cargo.is_active == True).all()
+    return db.query(models.Cargo).filter(models.Cargo.is_active == True).order_by(models.Cargo.id.desc()).all()
 
 @app.get("/ciudades/", response_model=List[schemas.CatalogOut])
 def get_ciudades(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return db.query(models.Ciudad).filter(models.Ciudad.is_active == True).all()
+    return db.query(models.Ciudad).filter(models.Ciudad.is_active == True).order_by(models.Ciudad.id.desc()).all()
 
 @app.get("/equipo_tipos/", response_model=List[schemas.CatalogOut])
 def get_equipo_tipos(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return db.query(models.EquipoTipo).filter(models.EquipoTipo.is_active == True).all()
+    return db.query(models.EquipoTipo).filter(models.EquipoTipo.is_active == True).order_by(models.EquipoTipo.id.desc()).all()
 
 @app.post("/empresas/", response_model=schemas.CatalogOut)
 def create_empresa(emp: schemas.CatalogBase, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
@@ -425,7 +425,7 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), current
 
 @app.get("/users/", response_model=List[schemas.UserOut])
 def list_users(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
-    return db.query(models.User).all()
+    return db.query(models.User).order_by(models.User.id.desc()).all()
 
 @app.post("/cargos/", response_model=schemas.CatalogOut)
 def create_cargo(obj: schemas.CatalogBase, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin_user)):
