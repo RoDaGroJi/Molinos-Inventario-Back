@@ -1,35 +1,46 @@
-from typing import List, Optional
-from fastapi import FastAPI, Depends, File, HTTPException, UploadFile, status, Query
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
-from . import models, schemas, auth, database
-from .database import engine, get_db
-from jose import jwt, JWTError
-from fastapi.middleware.cors import CORSMiddleware
-import pandas as pd
-import io
-from datetime import datetime
-from fastapi.responses import StreamingResponse, Response
-from reportlab.pdfgen import canvas
-from PyPDF2 import PdfReader, PdfWriter
-import tempfile
+"""
+Sistema de Gestión de Inventarios - API Principal
+"""
+
+# Imports estándar
 import io
 import os
+import tempfile
 from datetime import datetime
-from PyPDF2 import PdfReader, PdfWriter
-from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.table import Table, TableStyleInfo
-from openpyxl.styles import Font
+from typing import List, Optional
+
+# Imports de terceros - FastAPI y dependencias
+import pandas as pd
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response, StreamingResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
+# Imports de reportlab (con manejo de error)
 try:
-    from reportlab.lib.pagesizes import letter, A4
     from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib.pagesizes import A4, letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import cm
+    from reportlab.pdfgen import canvas
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
     REPORTLAB_AVAILABLE = True
 except ImportError:
     REPORTLAB_AVAILABLE = False
+
+# Imports de openpyxl
+from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table as ExcelTable
+from openpyxl.worksheet.table import TableStyleInfo
+from PyPDF2 import PdfReader, PdfWriter
+
+# Imports locales
+from . import auth, database, models, schemas
+from .database import engine, get_db
 
 models.Base.metadata.create_all(bind=engine)
 
