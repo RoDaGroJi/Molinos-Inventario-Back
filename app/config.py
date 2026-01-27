@@ -3,9 +3,9 @@ Configuración de la aplicación.
 Maneja todas las variables de entorno y constantes globales.
 """
 
-import os
-from typing import List
 from functools import lru_cache
+from typing import List
+
 from pydantic_settings import BaseSettings
 
 
@@ -13,15 +13,12 @@ class Settings(BaseSettings):
     """Configuración centralizada de la aplicación."""
     
     # Base de datos
-    database_url: str = os.getenv(
-        "DATABASE_URL",
-        "postgresql://neondb_owner:npg_NqOnXBEs1rH9@ep-muddy-rain-ahou8reu-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-    )
+    database_url: str = "postgresql://neondb_owner:npg_NqOnXBEs1rH9@ep-muddy-rain-ahou8reu-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
     
     # Seguridad
-    secret_key: str = os.getenv("SECRET_KEY", "MI_CLAVE_SECRETA_SUPER_SEGURA")
+    secret_key: str = "MI_CLAVE_SECRETA_SUPER_SEGURA"
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # 8 horas
+    access_token_expire_minutes: int = 480  # 8 horas
     
     # CORS
     cors_origins: List[str] = [
@@ -38,10 +35,12 @@ class Settings(BaseSettings):
     default_admin_full_name: str = "Administrador"
     
     # Entorno
-    environment: str = os.getenv("ENVIRONMENT", "development")
-    debug: bool = environment == "development"
+    environment: str = "development"
+    debug: bool = True
     
     class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
         case_sensitive = False
 
 

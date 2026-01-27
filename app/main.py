@@ -40,9 +40,11 @@ from PyPDF2 import PdfReader, PdfWriter
 
 # Imports locales
 from . import auth, database, models, schemas
+from .config import get_settings
 from .database import engine, get_db
 
-models.Base.metadata.create_all(bind=engine)
+# Obtener configuración
+settings = get_settings()
 
 app = FastAPI(title="Sistema de Inventario Oficina")
 # --- CONFIGURACIÓN DE CORS ---
@@ -68,7 +70,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(status_code=401, detail="No se pudo validar credenciales")
     try:
-        payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         username: str = payload.get("sub")
         if username is None: raise credentials_exception
     except JWTError: raise credentials_exception
